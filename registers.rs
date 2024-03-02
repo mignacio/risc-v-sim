@@ -1,6 +1,7 @@
 pub const REGISTER_LENGTH: i32 = 32;
 pub const REGISTER_WIDTH: i32 = 32;
 
+//TODO: Find a way to avoid having to use static mut
 static mut REGISTERS: [i32; 32] = [0; 32];
 
 static mut PROGRAM_COUNTER: i32 = 0;
