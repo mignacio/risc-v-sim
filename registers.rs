@@ -3,11 +3,14 @@ pub const REGISTER_WIDTH: i32 = 32;
 
 static mut REGISTERS: [i32; 32] = [0; 32];
 
+static mut PROGRAM_COUNTER: i32 = 0;
+
 pub fn print(){
     unsafe{
         for reg in REGISTERS{
             println!{"{:#032b}", reg};
         }
+        println!("PROGRAM COUNTER: {:#032b}", PROGRAM_COUNTER);
     }
 }
 
