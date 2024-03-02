@@ -11,7 +11,7 @@ From [Wikipedia](https://en.wikipedia.org/wiki/RISC-V): RISC-V is an open standa
 
 Also form Wikipedia: RISC-V has a modular design, consisting of alternative base parts, with added optional extensions. The base specifies instructions, control flow, memory and adressing, locig manipulation and ancilliaries.
 
-For simplicity, the SIM will start implementing the [RV32I](https://five-embeddev.com/riscv-isa-manual/latest/rv32i.html).
+For simplicity, the SIM we'll start implementing the [RV32I](https://five-embeddev.com/riscv-isa-manual/latest/rv32i.html).
 
 ### Registers
 The base interger ISA, RV32I has 32 registers, which are 32 bit wide each. x0 is hardwired with all bits equal to 0, and the registers x1 to x31 are all general purpose registers. There is one extra register which is the program counter(PC).
