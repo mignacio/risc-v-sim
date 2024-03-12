@@ -1,4 +1,6 @@
+#[allow(dead_code)]
 pub const REGISTER_LENGTH: i32 = 32;
+#[allow(dead_code)]
 pub const REGISTER_WIDTH: i32 = 32;
 
 //TODO: Find a way to avoid having to use static mut
@@ -26,4 +28,8 @@ pub fn get(index: usize) -> i32{
     unsafe{
         REGISTERS[index]
     }
+}
+
+pub fn fake_set(_index: i32, _value: i32){
+
 }

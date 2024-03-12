@@ -1,12 +1,18 @@
 pub mod registers;
+extern crate phf;
+use phf::phf_map;
+
+pub type InstFunc = fn(RV32I);
 
 #[allow(dead_code)]
-//static OPCODES: [fn; 32] = [std::ptr::null; 32];
+pub static OPCODES: phf::Map<i32, InstFunc> = phf_map!{
+    19i32 => addi,
+};
 
 // Struct for decoded instruction.
 pub struct RV32I{
     raw_inst:   i32, // Raw instruction.
-    opcode:     i32, // Opcode field.
+    pub opcode:     i32, // Opcode field.
     rs1:        i32, // Source register 1.
     rd:         i32, // Destination register.
     imm:        i32, // Sign extended immediate value for I type.
@@ -25,6 +31,7 @@ impl RV32I {
         }
     }
     // Function to print the decoded instruction in a human readable way.
+    #[allow(dead_code)]
     pub fn to_string(&self) -> String{
         format!("raw_inst: {:#032b}\n\
                  opcode:   {:#032b}\n\
@@ -32,6 +39,7 @@ impl RV32I {
                  rs1:      {:#032b}\n\
                  imm:      {:#032b}\n\
                  funct3:   {:#032b}\n", self.raw_inst, self.opcode, self.rd, self.rs1, self.imm, self.funct3)
+    
     }
 }
 
@@ -115,9 +123,10 @@ pub fn sltu(destination: usize, source1: usize, source2: usize){
 }
 
 #[allow(dead_code)]
-pub fn addi(destination: usize, source1: usize, immediate: i32){
-    let operand1 = registers::get(source1);
-    registers::set(destination, operand1 + immediate);
+pub fn addi(instruction: RV32I){
+    let rs1 = registers::get(instruction.rs1.try_into().unwrap());
+    registers::fake_set(instruction.rd, rs1 + instruction.imm);
+    println!("ADDI");
 }
 
 #[allow(dead_code)]
