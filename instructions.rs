@@ -1,4 +1,40 @@
 pub mod registers;
+
+#[allow(dead_code)]
+//static OPCODES: [fn; 32] = [std::ptr::null; 32];
+
+// Struct for decoded instruction.
+pub struct RV32I{
+    raw_inst:   i32, // Raw instruction.
+    opcode:     i32, // Opcode field.
+    rs1:        i32, // Source register 1.
+    rd:         i32, // Destination register.
+    imm:        i32, // Sign extended immediate value for I type.
+    funct3:     i32 // Sub-function value I type.
+}
+
+impl RV32I {
+    pub fn decode(coded_inst: i32) -> RV32I{
+        RV32I {
+            raw_inst: coded_inst,
+            opcode: (coded_inst & 0b0000000000000000000000001111111),
+            rd:     (coded_inst & 0b0000000000000000000111110000000) >> 7,
+            funct3: (coded_inst & 0b0000000000000000111000000000000) >> 12,
+            rs1:    (coded_inst & 0b0000000000011111000000000000000) >> 15,
+            imm:    (coded_inst & 0b1111111111100000000000000000000) >> 20,
+        }
+    }
+    // Function to print the decoded instruction in a human readable way.
+    pub fn to_string(&self) -> String{
+        format!("raw_inst: {:#032b}\n\
+                 opcode:   {:#032b}\n\
+                 rd:       {:#032b}\n\
+                 rs1:      {:#032b}\n\
+                 imm:      {:#032b}\n\
+                 funct3:   {:#032b}\n", self.raw_inst, self.opcode, self.rd, self.rs1, self.imm, self.funct3)
+    }
+}
+
 //RV32I instruction set functions
 #[allow(dead_code)]
 pub fn add(destination: usize, source1: usize, source2: usize){

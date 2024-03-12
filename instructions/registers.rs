@@ -6,6 +6,7 @@ static mut REGISTERS: [i32; 32] = [0; 32];
 
 pub static mut PROGRAM_COUNTER: u32 = 0;
 
+#[allow(dead_code)]
 pub fn print(){
     unsafe{
         for reg in REGISTERS{
