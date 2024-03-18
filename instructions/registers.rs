@@ -18,18 +18,15 @@ pub fn print(){
     }
 }
 
-pub fn set(index: usize, value: i32){
+pub fn set(index: i32, value: i32){
     unsafe{
-        REGISTERS[index] = value;
+        REGISTERS[index as usize] = value;
     }
 }
 
-pub fn get(index: usize) -> i32{
+pub fn get(index: i32) -> i32{
     unsafe{
-        REGISTERS[index]
+        REGISTERS[index as usize]
     }
 }
 
-pub fn fake_set(_index: i32, _value: i32){
-
-}
