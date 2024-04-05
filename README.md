@@ -17,3 +17,13 @@ For simplicity, the SIM we'll start implementing the [RV32I](https://five-embedd
 The base interger ISA, RV32I has 32 registers, which are 32 bit wide each. x0 is hardwired with all bits equal to 0, and the registers x1 to x31 are all general purpose registers. There is one extra register which is the program counter(PC).
 
 There is no dedicated stack pointer or subroutine addres link register in the Base Integer ISA. However the standard software convetion uses x1 to hold the return address for a call, x5 is an alternate link register and x2 is used as the stack pointer.
+
+### TODO
+#### Near term
+* Implement remaining instruction functions.
+* Load a binary file, decode it and execute it.
+* Command line user interface: load file, run, step, print registers.
+#### Long term
+* Graphical user interface. Maybe in browser.
+* Implement more architecture extensions. Multiply, atomic, floating point, 64-bit.
+* Debugging: add breakpoints, step back functionality.
