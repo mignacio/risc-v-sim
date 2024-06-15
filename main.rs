@@ -1,7 +1,3 @@
-mod instructions;
-
-use std::env;
-
 //RATAUI CODE
 use crossterm::{
     event::{self, KeyCode, KeyEventKind},
@@ -18,21 +14,13 @@ use ratatui::{
 use std::io::{self, stdout, Result};
 //END RATATUI CODE
 
-use instructions::registers;
-use instructions::instruction_types::DecodedInst;
-use instructions::InstFunc;
-const coded_instruction_arr: [i32; 9] = [0x00730293, 0x00734293, 0x00736293, 0x00737293, 0x00731293, 0x00735293, 0x40735293, 0x00732293, 0x00733293];
+mod simulator;
 
 fn main() -> Result<()> {
-    //SIM Init
-    registers::set(15, 15);
 
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-
-    let layout_arr: [Layout; 2];
-    let frame_arr: [Frame; 3];
 
     terminal.clear()?;
     // TODO main loop
@@ -75,14 +63,14 @@ fn ui(frame: &mut Frame){
             outer_layout[0]
     );
     frame.render_widget(
-        Paragraph::new("Next decoded instruction goes here.")
-            .block(Block::bordered().title("Next instruction."))
+        Paragraph::new("Last decoded instruction goes here.")
+            .block(Block::bordered().title("Last instruction."))
             .white()
             .on_blue(),
             inner_layout[0]
     );
     frame.render_widget(
-        Paragraph::new(registers::print())
+        Paragraph::new(simulator::instructions::registers::print())
             .block(Block::bordered().title("Registers"))
             .white()
             .on_blue(),
@@ -101,63 +89,15 @@ fn event_handler() -> io::Result<bool>{
                     return Ok(true);
                 }else if key.code == KeyCode::Char('s')
                 {
-                    let _ = step_sim();
-                    /*
-                    let decoded_inst: DecodedInst;
-                    match DecodedInst::decode(coded) {
-                        Ok(v) => decoded_inst = v,
-                        Err(_e) => return Ok(true)
-                    }
-                    //println!("{}", decoded_inst.to_string());
-                    let decoded_funct: i32 = decoded_inst.funct3;
-                    let instruction_function: InstFunc = instructions::I_CODES.get( &decoded_funct).cloned().expect("REASON");
-                    instruction_function(decoded_inst);
-                    */
+                    let _ = simulator::step();
+
                 }
                 else if key.code == KeyCode::Char('r')
                 {
-                    reset_sim();
+                    simulator::reset();
                 }
             }
         }
     }
     return Ok(false);
 }
-
-
-fn step_sim() -> io::Result<bool>{
-    // Fetch the next instruction
-    let fetched_instruction = coded_instruction_arr[registers::get(registers::PC_INDEX) as usize];
-    
-    // Decode it
-    let decoded_inst: DecodedInst;
-    match DecodedInst::decode(fetched_instruction) {
-        Ok(v) => decoded_inst = v,
-        Err(_e) => return Ok(false)
-    }
-    let decoded_funct: i32 = decoded_inst.funct3;
-    let instruction_function: InstFunc = instructions::I_CODES.get(&decoded_funct).cloned().expect("REASON");
-    
-    // Execute it
-    instruction_function(decoded_inst);
-    
-    // Update program counter
-    registers::set(registers::PC_INDEX, registers::get(registers::PC_INDEX) + 1);
-    return Ok(true);
-}
-
-fn reset_sim(){
-    registers::reset();
-}
-/*
-fn main(){
-    env::set_var("RUST_BACKTRACE", "1");
-    registers::set(15, 15);
-    //registers::print();
-
-    let coded_instruction_arr: [i32; 9] = [0x00730293, 0x00734293, 0x00736293, 0x00737293, 0x00731293, 0x00735293, 0x40735293, 0x00732293, 0x00733293];
-
-    for coded in coded_instruction_arr{
-
-    }
-}*/
