@@ -95,43 +95,36 @@ pub fn sltu(instruction: instruction_types::DecodedInst){
 pub fn addi(instruction: instruction_types::DecodedInst){
     let rs1 = registers::get(instruction.rs1);
     registers::set(instruction.rd, rs1 + instruction.imm);
-    println!("ADDI");
 }
 #[allow(dead_code)]
 pub fn xori(instruction: instruction_types::DecodedInst){
     let operand1 = registers::get(instruction.rs1.try_into().unwrap());
     registers::set(instruction.rd, operand1 ^ instruction.imm);
-    println!("XORI");
 }
 #[allow(dead_code)]
 pub fn andi(instruction: instruction_types::DecodedInst){
     let operand1 = registers::get(instruction.rs1);
     registers::set(instruction.rd, operand1 & instruction.imm);
-    println!("ANDI");
 }
 #[allow(dead_code)]
 pub fn ori(instruction: instruction_types::DecodedInst){
     let operand1 = registers::get(instruction.rs1);
     registers::set(instruction.rd, operand1 | instruction.imm);
-    println!("ORI");
 }
 #[allow(dead_code)]
 pub fn slli(instruction: instruction_types::DecodedInst){
     let operand1 = registers::get(instruction.rs1);
     registers::set(instruction.rd, operand1 << (instruction.imm & 0x20));
-    println!("SLLI");
 }
 #[allow(dead_code)]
 pub fn srli(instruction: instruction_types::DecodedInst){
     let operand1 = registers::get(instruction.rs1);
     registers::set(instruction.rd, operand1 >> (instruction.imm & 0x20));
-    println!("SRLI");
 }
 #[allow(dead_code)]
 pub fn srai(instruction: instruction_types::DecodedInst){
     let operand1 = registers::get(instruction.rs1);
     registers::set(instruction.rd, operand1 >> (instruction.imm & 0x20));
-    println!("SRLI/SRAI");
 }
 #[allow(dead_code)]
 pub fn slti(instruction: instruction_types::DecodedInst){
@@ -139,7 +132,6 @@ pub fn slti(instruction: instruction_types::DecodedInst){
     
     let result = if operand1 < instruction.imm { 1 } else { 0};
     registers::set(instruction.rd, result);
-    println!("SLTI");
 }
 #[allow(dead_code)]
 pub fn sltiu(instruction: instruction_types::DecodedInst){
@@ -147,7 +139,6 @@ pub fn sltiu(instruction: instruction_types::DecodedInst){
     
     let result = if operand1 < instruction.imm as u32 { 1 } else { 0};
     registers::set(instruction.rd, result);
-    println!("SLTIU");
 }
 
 // TYPE I - OPCODE 00000011
