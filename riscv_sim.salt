@@ -1,0 +1,326 @@
+// RISC-V RV32I Simulator
+// Migrated from Rust to Salt
+import metal
+
+// ============= CPU State =============
+
+regs mut = int[32]
+pc mut = 0
+
+reg_print() {
+    outer regs
+    outer pc
+    for reg in regs { print("{reg}") }
+    print("PC: {pc}")
+}
+
+reg_set(i int, val int) {
+    outer mut regs
+    regs[i] = val
+}
+
+reg_get(i int) int {
+    outer regs
+    regs[i]
+}
+
+branch(offset int) {
+    outer mut pc
+    pc += offset
+}
+
+// ============= Decoded Instruction =============
+
+DecodedInst {
+    raw_inst int
+    opcode int
+    rs1 int
+    rs2 int
+    rd int
+    imm int
+    funct3 int
+    funct7 int
+}
+
+print_inst(inst DecodedInst) {
+    print("raw_inst: {inst.raw_inst}")
+    print("opcode:   {inst.opcode}")
+    print("rd:       {inst.rd}")
+    print("rs1:      {inst.rs1}")
+    print("rs2:      {inst.rs2}")
+    print("imm:      {inst.imm}")
+    print("funct3:   {inst.funct3}")
+    print("funct7:   {inst.funct7}")
+}
+
+// ============= Bitfield Types for Instruction Formats =============
+
+RV32R {
+    opcode 0..6
+    rd 7..11
+    funct3 12..14
+    rs1 15..19
+    rs2 20..24
+    funct7 25..31
+}
+
+RV32I {
+    opcode 0..6
+    rd 7..11
+    funct3 12..14
+    rs1 15..19
+    imm 20..31
+}
+
+// Discontiguous imm: bits 7..11 = low, bits 25..31 = high
+RV32S {
+    opcode 0..6
+    imm (7..11, 25..31)
+    funct3 12..14
+    rs1 15..19
+    rs2 20..24
+}
+
+RV32B {
+    opcode 0..6
+    imm_11 7..7
+    imm_4_1 8..11
+    funct3 12..14
+    rs1 15..19
+    rs2 20..24
+    imm_10_5 25..30
+    imm_12 31..31
+}
+
+RV32U {
+    opcode 0..6
+    rd 7..11
+    imm_31_12 12..31
+}
+
+RV32J {
+    opcode 0..6
+    rd 7..11
+    imm_19_12 12..19
+    imm_11 20..20
+    imm_10_1 21..30
+    imm_20 31..31
+}
+
+// ============= Instruction Decoding =============
+
+decode(coded_inst int) DecodedInst or string {
+    opcode = RV32R(coded_inst).opcode
+    return cond {
+        opcode == 0x33: decode_r_type(coded_inst)
+        contains([0x13, 0x03, 0x67, 0x73], opcode): decode_i_type(coded_inst)
+        opcode == 0x23: decode_s_type(coded_inst)
+        opcode == 0x63: decode_b_type(coded_inst)
+        contains([0x37, 0x17], opcode): decode_u_type(coded_inst)
+        opcode == 0x6F: decode_j_type(coded_inst)
+        else: "Instruction could not be decoded"
+    }
+}
+
+decode_r_type(coded_inst int) DecodedInst {
+    DecodedInst { ...RV32R(coded_inst), raw_inst: coded_inst, imm: 0 }
+}
+
+decode_i_type(coded_inst int) DecodedInst {
+    DecodedInst { ...RV32I(coded_inst), raw_inst: coded_inst, rs2: 0, funct7: 0 }
+}
+
+// Discontiguous bitfield auto-concatenates imm[4:0]=inst[11:7], imm[11:5]=inst[31:25]
+decode_s_type(coded_inst int) DecodedInst {
+    DecodedInst { ...RV32S(coded_inst), raw_inst: coded_inst, rd: 0, funct7: 0 }
+}
+
+// B-type imm bits are scattered: proper reconstruction from named fields
+decode_b_type(coded_inst int) DecodedInst {
+    b = RV32B(coded_inst)
+    imm = metal { (b.imm_12 << 12) | (b.imm_11 << 11) | (b.imm_10_5 << 5) | (b.imm_4_1 << 1) }
+    DecodedInst { ...b, raw_inst: coded_inst, rd: 0, imm: imm, funct7: 0 }
+}
+
+decode_u_type(coded_inst int) DecodedInst {
+    u = RV32U(coded_inst)
+    DecodedInst { ...u, raw_inst: coded_inst, rs1: 0, rs2: 0, imm: metal { u.imm_31_12 << 12 }, funct3: 0, funct7: 0 }
+}
+
+// J-type imm bits are scattered: proper reconstruction from named fields
+decode_j_type(coded_inst int) DecodedInst {
+    j = RV32J(coded_inst)
+    imm = metal { (j.imm_20 << 20) | (j.imm_19_12 << 12) | (j.imm_11 << 11) | (j.imm_10_1 << 1) }
+    DecodedInst { ...j, raw_inst: coded_inst, rs1: 0, rs2: 0, imm: imm, funct3: 0, funct7: 0 }
+}
+
+// ============= R-Type Instructions (opcode 0x33) =============
+
+exec_add(inst DecodedInst) {
+    reg_set(inst.rd, reg_get(inst.rs1) + reg_get(inst.rs2))
+}
+
+exec_sub(inst DecodedInst) {
+    reg_set(inst.rd, reg_get(inst.rs1) - reg_get(inst.rs2))
+}
+
+exec_xor(inst DecodedInst) {
+    reg_set(inst.rd, metal { reg_get(inst.rs1) ^ reg_get(inst.rs2) })
+}
+
+exec_or(inst DecodedInst) {
+    reg_set(inst.rd, metal { reg_get(inst.rs1) | reg_get(inst.rs2) })
+}
+
+exec_and(inst DecodedInst) {
+    reg_set(inst.rd, metal { reg_get(inst.rs1) & reg_get(inst.rs2) })
+}
+
+// This was a bug in the original Rust code: shift mask was 0x20 (bit 5 only)
+// instead of 0x1F (lowest 5 bits).
+exec_sll(inst DecodedInst) {
+    reg_set(inst.rd, metal { reg_get(inst.rs1) << (reg_get(inst.rs2) & 0x1F) })
+}
+
+exec_srl(inst DecodedInst) {
+    reg_set(inst.rd, metal { reg_get(inst.rs1) >> (reg_get(inst.rs2) & 0x1F) })
+}
+
+// TODO: arithmetic vs logical shift
+exec_sra(inst DecodedInst) {
+    reg_set(inst.rd, metal { reg_get(inst.rs1) >> (reg_get(inst.rs2) & 0x1F) })
+}
+
+exec_slt(inst DecodedInst) {
+    result = cond { reg_get(inst.rs1) < reg_get(inst.rs2): 1; else: 0 }
+    reg_set(inst.rd, result)
+}
+
+exec_sltu(inst DecodedInst) {
+    // TODO: unsigned comparison
+    result = cond { reg_get(inst.rs1) < reg_get(inst.rs2): 1; else: 0 }
+    reg_set(inst.rd, result)
+}
+
+// ============= I-Type Instructions (opcode 0x13) =============
+
+exec_addi(inst DecodedInst) {
+    reg_set(inst.rd, reg_get(inst.rs1) + inst.imm)
+    print("ADDI")
+}
+
+exec_xori(inst DecodedInst) {
+    reg_set(inst.rd, metal { reg_get(inst.rs1) ^ inst.imm })
+    print("XORI")
+}
+
+exec_andi(inst DecodedInst) {
+    reg_set(inst.rd, metal { reg_get(inst.rs1) & inst.imm })
+    print("ANDI")
+}
+
+exec_ori(inst DecodedInst) {
+    reg_set(inst.rd, metal { reg_get(inst.rs1) | inst.imm })
+    print("ORI")
+}
+
+exec_slli(inst DecodedInst) {
+    reg_set(inst.rd, metal { reg_get(inst.rs1) << (inst.imm & 0x1F) })
+    print("SLLI")
+}
+
+exec_srli(inst DecodedInst) {
+    reg_set(inst.rd, metal { reg_get(inst.rs1) >> (inst.imm & 0x1F) })
+    print("SRLI")
+}
+
+exec_srai(inst DecodedInst) {
+    reg_set(inst.rd, metal { reg_get(inst.rs1) >> (inst.imm & 0x1F) })
+    print("SRLI/SRAI")
+}
+
+exec_slti(inst DecodedInst) {
+    result = cond { reg_get(inst.rs1) < inst.imm: 1; else: 0 }
+    reg_set(inst.rd, result)
+    print("SLTI")
+}
+
+exec_sltiu(inst DecodedInst) {
+    // TODO: unsigned comparison
+    result = cond { reg_get(inst.rs1) < inst.imm: 1; else: 0 }
+    reg_set(inst.rd, result)
+    print("SLTIU")
+}
+
+// ============= Load/Store (TODO) =============
+exec_lb() {}
+exec_lh() {}
+exec_lw() {}
+exec_lbu() {}
+exec_lhu() {}
+exec_sb() {}
+exec_sh() {}
+exec_sw() {}
+
+// ============= Branch Instructions (B-Type) =============
+
+exec_beq(inst DecodedInst) {
+    cond reg_get(inst.rs1) == reg_get(inst.rs2) { branch(inst.imm) }
+}
+
+exec_bne(inst DecodedInst) {
+    cond reg_get(inst.rs1) != reg_get(inst.rs2) { branch(inst.imm) }
+}
+
+exec_blt(inst DecodedInst) {
+    cond reg_get(inst.rs1) < reg_get(inst.rs2) { branch(inst.imm) }
+}
+
+exec_bge(inst DecodedInst) {
+    cond reg_get(inst.rs1) >= reg_get(inst.rs2) { branch(inst.imm) }
+}
+
+exec_bltu(inst DecodedInst) {
+    // TODO: unsigned comparison
+    cond reg_get(inst.rs1) < reg_get(inst.rs2) { branch(inst.imm) }
+}
+
+// This was a bug in the original Rust code: bgeu used == instead of >=.
+exec_bgeu(inst DecodedInst) {
+    cond reg_get(inst.rs1) >= reg_get(inst.rs2) { branch(inst.imm) }
+}
+
+// ============= Jump Instructions =============
+
+exec_jal(inst DecodedInst) {
+    branch(inst.imm)
+    reg_set(inst.rs1, reg_get(inst.rs1) + 4)
+}
+
+// TODO: exec_jalr, exec_lui, exec_auipc, exec_ecall, exec_ebreak, exec_fence
+
+// ============= Dispatch =============
+
+dispatch_i_type(inst DecodedInst) {
+    cond inst.funct3 {
+        0x0: exec_addi(inst)
+        0x4: exec_xori(inst)
+        0x6: exec_ori(inst)
+        0x7: exec_andi(inst)
+        0x1: exec_slli(inst)
+        0x5: exec_srai(inst)
+        0x2: exec_slti(inst)
+        0x3: exec_sltiu(inst)
+    }
+}
+
+// ============= Main =============
+
+reg_set(15, 15)
+
+coded_instructions = [0x00730293, 0x00734293, 0x00736293, 0x00737293, 0x00731293, 0x00735293, 0x40735293, 0x00732293, 0x00733293]
+
+for coded in coded_instructions {
+    inst = decode(coded) else { break }
+    dispatch_i_type(inst)
+}
