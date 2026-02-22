@@ -1,5 +1,4 @@
 // RISC-V RV32I Simulator
-// Migrated from Rust to Salt
 import metal
 
 // ============= CPU State =============
@@ -7,16 +6,10 @@ import metal
 regs mut = int[32]
 pc mut = 0
 
-reg_print() {
-    outer regs
-    outer pc
-    for reg in regs { print("{reg}") }
-    print("PC: {pc}")
-}
-
 reg_set(i int, val int) {
     outer mut regs
-    regs[i] = val
+    // x0 is hardwired to zero in RV32I.
+    cond i != 0 { regs[i] = val }
 }
 
 reg_get(i int) int {
@@ -27,6 +20,14 @@ reg_get(i int) int {
 branch(offset int) {
     outer mut pc
     pc += offset
+}
+
+shamt5(v int) int {
+    metal { v & 0x1F }
+}
+
+lt_to_int(a int, b int) int {
+    cond { a < b: 1; else: 0 }
 }
 
 // ============= Decoded Instruction =============
@@ -40,17 +41,6 @@ DecodedInst {
     imm int
     funct3 int
     funct7 int
-}
-
-print_inst(inst DecodedInst) {
-    print("raw_inst: {inst.raw_inst}")
-    print("opcode:   {inst.opcode}")
-    print("rd:       {inst.rd}")
-    print("rs1:      {inst.rs1}")
-    print("rs2:      {inst.rs2}")
-    print("imm:      {inst.imm}")
-    print("funct3:   {inst.funct3}")
-    print("funct7:   {inst.funct7}")
 }
 
 // ============= Bitfield Types for Instruction Formats =============
@@ -176,30 +166,26 @@ exec_and(inst DecodedInst) {
     reg_set(inst.rd, metal { reg_get(inst.rs1) & reg_get(inst.rs2) })
 }
 
-// This was a bug in the original Rust code: shift mask was 0x20 (bit 5 only)
-// instead of 0x1F (lowest 5 bits).
 exec_sll(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) << (reg_get(inst.rs2) & 0x1F) })
+    reg_set(inst.rd, metal { reg_get(inst.rs1) << shamt5(reg_get(inst.rs2)) })
 }
 
 exec_srl(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) >> (reg_get(inst.rs2) & 0x1F) })
+    reg_set(inst.rd, metal { u32(reg_get(inst.rs1)) >> shamt5(reg_get(inst.rs2)) })
 }
 
 // TODO: arithmetic vs logical shift
 exec_sra(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) >> (reg_get(inst.rs2) & 0x1F) })
+    reg_set(inst.rd, metal { i32(reg_get(inst.rs1)) >> shamt5(reg_get(inst.rs2)) })
 }
 
 exec_slt(inst DecodedInst) {
-    result = cond { reg_get(inst.rs1) < reg_get(inst.rs2): 1; else: 0 }
-    reg_set(inst.rd, result)
+    reg_set(inst.rd, lt_to_int(reg_get(inst.rs1), reg_get(inst.rs2)))
 }
 
 exec_sltu(inst DecodedInst) {
     // TODO: unsigned comparison
-    result = cond { reg_get(inst.rs1) < reg_get(inst.rs2): 1; else: 0 }
-    reg_set(inst.rd, result)
+    reg_set(inst.rd, lt_to_int(reg_get(inst.rs1), reg_get(inst.rs2)))
 }
 
 // ============= I-Type Instructions (opcode 0x13) =============
@@ -225,76 +211,36 @@ exec_ori(inst DecodedInst) {
 }
 
 exec_slli(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) << (inst.imm & 0x1F) })
+    reg_set(inst.rd, metal { reg_get(inst.rs1) << shamt5(inst.imm) })
     print("SLLI")
 }
 
 exec_srli(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) >> (inst.imm & 0x1F) })
+    reg_set(inst.rd, metal { u32(reg_get(inst.rs1)) >> shamt5(inst.imm) })
     print("SRLI")
 }
 
 exec_srai(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) >> (inst.imm & 0x1F) })
+    reg_set(inst.rd, metal { i32(reg_get(inst.rs1)) >> shamt5(inst.imm) })
     print("SRLI/SRAI")
 }
 
 exec_slti(inst DecodedInst) {
-    result = cond { reg_get(inst.rs1) < inst.imm: 1; else: 0 }
-    reg_set(inst.rd, result)
+    reg_set(inst.rd, lt_to_int(reg_get(inst.rs1), inst.imm))
     print("SLTI")
 }
 
 exec_sltiu(inst DecodedInst) {
     // TODO: unsigned comparison
-    result = cond { reg_get(inst.rs1) < inst.imm: 1; else: 0 }
-    reg_set(inst.rd, result)
+    reg_set(inst.rd, lt_to_int(reg_get(inst.rs1), inst.imm))
     print("SLTIU")
 }
 
-// ============= Load/Store (TODO) =============
-exec_lb() {}
-exec_lh() {}
-exec_lw() {}
-exec_lbu() {}
-exec_lhu() {}
-exec_sb() {}
-exec_sh() {}
-exec_sw() {}
-
-// ============= Branch Instructions (B-Type) =============
-
-exec_beq(inst DecodedInst) {
-    cond reg_get(inst.rs1) == reg_get(inst.rs2) { branch(inst.imm) }
-}
-
-exec_bne(inst DecodedInst) {
-    cond reg_get(inst.rs1) != reg_get(inst.rs2) { branch(inst.imm) }
-}
-
-exec_blt(inst DecodedInst) {
-    cond reg_get(inst.rs1) < reg_get(inst.rs2) { branch(inst.imm) }
-}
-
-exec_bge(inst DecodedInst) {
-    cond reg_get(inst.rs1) >= reg_get(inst.rs2) { branch(inst.imm) }
-}
-
-exec_bltu(inst DecodedInst) {
-    // TODO: unsigned comparison
-    cond reg_get(inst.rs1) < reg_get(inst.rs2) { branch(inst.imm) }
-}
-
-// This was a bug in the original Rust code: bgeu used == instead of >=.
-exec_bgeu(inst DecodedInst) {
-    cond reg_get(inst.rs1) >= reg_get(inst.rs2) { branch(inst.imm) }
-}
-
-// ============= Jump Instructions =============
-
 exec_jal(inst DecodedInst) {
+    outer pc
+    ret_addr = pc + 4
     branch(inst.imm)
-    reg_set(inst.rs1, reg_get(inst.rs1) + 4)
+    reg_set(inst.rd, ret_addr)
 }
 
 // TODO: exec_jalr, exec_lui, exec_auipc, exec_ecall, exec_ebreak, exec_fence
@@ -308,9 +254,44 @@ dispatch_i_type(inst DecodedInst) {
         0x6: exec_ori(inst)
         0x7: exec_andi(inst)
         0x1: exec_slli(inst)
-        0x5: exec_srai(inst)
+        0x5: cond metal { (inst.imm >> 5) & 0x7F } { 0x00: exec_srli(inst); 0x20: exec_srai(inst) }
         0x2: exec_slti(inst)
         0x3: exec_sltiu(inst)
+    }
+}
+
+dispatch_r_type(inst DecodedInst) {
+    cond inst.funct3 {
+        0x0: cond inst.funct7 { 0x00: exec_add(inst); 0x20: exec_sub(inst) }
+        0x1: exec_sll(inst)
+        0x2: exec_slt(inst)
+        0x3: exec_sltu(inst)
+        0x4: exec_xor(inst)
+        0x5: cond inst.funct7 { 0x00: exec_srl(inst); 0x20: exec_sra(inst) }
+        0x6: exec_or(inst)
+        0x7: exec_and(inst)
+    }
+}
+
+dispatch_b_type(inst DecodedInst) {
+    lhs = reg_get(inst.rs1)
+    rhs = reg_get(inst.rs2)
+    cond inst.funct3 {
+        0x0: cond lhs == rhs { branch(inst.imm) }
+        0x1: cond lhs != rhs { branch(inst.imm) }
+        0x4: cond lhs < rhs { branch(inst.imm) }
+        0x5: cond lhs >= rhs { branch(inst.imm) }
+        0x6: cond lhs < rhs { branch(inst.imm) } // TODO: unsigned comparison
+        0x7: cond lhs >= rhs { branch(inst.imm) } // TODO: unsigned comparison
+    }
+}
+
+dispatch(inst DecodedInst) {
+    cond inst.opcode {
+        0x33: dispatch_r_type(inst)
+        0x13: dispatch_i_type(inst)
+        0x63: dispatch_b_type(inst)
+        0x6F: exec_jal(inst)
     }
 }
 
@@ -322,5 +303,5 @@ coded_instructions = [0x00730293, 0x00734293, 0x00736293, 0x00737293, 0x00731293
 
 for coded in coded_instructions {
     inst = decode(coded) else { break }
-    dispatch_i_type(inst)
+    dispatch(inst)
 }
