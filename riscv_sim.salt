@@ -10,13 +10,13 @@ CPU {
 
 cpu mut = CPU { pc: 0 }
 
-reg_set(i int, val int) {
+export reg_set(i int, val int) {
     outer mut cpu
     // x0 is hardwired to zero in RV32I.
     cond i != 0 { cpu.regs[i] = val }
 }
 
-reg_get(i int) int {
+export reg_get(i int) int {
     outer cpu
     return cpu.regs[i]
 }
@@ -99,7 +99,7 @@ RV32J {
 
 // ============= Instruction Decoding =============
 
-decode(coded_inst int) DecodedInst or string {
+export decode(coded_inst int) DecodedInst or string {
     opcode = RV32R(coded_inst).opcode
     return cond {
         opcode == 0x33: decode_r_type(coded_inst)
@@ -246,7 +246,7 @@ exec_jal(inst DecodedInst) {
 
 // ============= Dispatch =============
 
-dispatch(inst DecodedInst) {
+export dispatch(inst DecodedInst) {
     cond inst.opcode {
         0x33: cond inst.funct3 {
             0x0: cond inst.funct7 { 0x00: exec_add(inst); 0x20: exec_sub(inst) }
