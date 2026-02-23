@@ -3,31 +3,31 @@ import metal
 
 // ============= CPU State =============
 
-regs mut = int[32]
-pc mut = 0
+CPU {
+    regs int[32]
+    pc int
+}
+
+cpu mut = CPU { pc: 0 }
 
 reg_set(i int, val int) {
-    outer mut regs
+    outer mut cpu
     // x0 is hardwired to zero in RV32I.
-    cond i != 0 { regs[i] = val }
+    cond i != 0 { cpu.regs[i] = val }
 }
 
 reg_get(i int) int {
-    outer regs
-    regs[i]
+    outer cpu
+    return cpu.regs[i]
 }
 
 branch(offset int) {
-    outer mut pc
-    pc += offset
+    outer mut cpu
+    cpu.pc += offset
 }
 
 shamt5(v int) int {
-    metal { v & 0x1F }
-}
-
-lt_to_int(a int, b int) int {
-    cond { a < b: 1; else: 0 }
+    return metal { v & 0x1F }
 }
 
 // ============= Decoded Instruction =============
@@ -113,35 +113,35 @@ decode(coded_inst int) DecodedInst or string {
 }
 
 decode_r_type(coded_inst int) DecodedInst {
-    DecodedInst { ...RV32R(coded_inst), raw_inst: coded_inst, imm: 0 }
+    return DecodedInst { ...RV32R(coded_inst), raw_inst: coded_inst, imm: 0 }
 }
 
 decode_i_type(coded_inst int) DecodedInst {
-    DecodedInst { ...RV32I(coded_inst), raw_inst: coded_inst, rs2: 0, funct7: 0 }
+    return DecodedInst { ...RV32I(coded_inst), raw_inst: coded_inst, rs2: 0, funct7: 0 }
 }
 
 // Discontiguous bitfield auto-concatenates imm[4:0]=inst[11:7], imm[11:5]=inst[31:25]
 decode_s_type(coded_inst int) DecodedInst {
-    DecodedInst { ...RV32S(coded_inst), raw_inst: coded_inst, rd: 0, funct7: 0 }
+    return DecodedInst { ...RV32S(coded_inst), raw_inst: coded_inst, rd: 0, funct7: 0 }
 }
 
 // B-type imm bits are scattered: proper reconstruction from named fields
 decode_b_type(coded_inst int) DecodedInst {
     b = RV32B(coded_inst)
     imm = metal { (b.imm_12 << 12) | (b.imm_11 << 11) | (b.imm_10_5 << 5) | (b.imm_4_1 << 1) }
-    DecodedInst { ...b, raw_inst: coded_inst, rd: 0, imm: imm, funct7: 0 }
+    return DecodedInst { ...b, raw_inst: coded_inst, rd: 0, imm: imm, funct7: 0 }
 }
 
 decode_u_type(coded_inst int) DecodedInst {
     u = RV32U(coded_inst)
-    DecodedInst { ...u, raw_inst: coded_inst, rs1: 0, rs2: 0, imm: metal { u.imm_31_12 << 12 }, funct3: 0, funct7: 0 }
+    return DecodedInst { ...u, raw_inst: coded_inst, rs1: 0, rs2: 0, imm: metal { u.imm_31_12 << 12 }, funct3: 0, funct7: 0 }
 }
 
 // J-type imm bits are scattered: proper reconstruction from named fields
 decode_j_type(coded_inst int) DecodedInst {
     j = RV32J(coded_inst)
     imm = metal { (j.imm_20 << 20) | (j.imm_19_12 << 12) | (j.imm_11 << 11) | (j.imm_10_1 << 1) }
-    DecodedInst { ...j, raw_inst: coded_inst, rs1: 0, rs2: 0, imm: imm, funct3: 0, funct7: 0 }
+    return DecodedInst { ...j, raw_inst: coded_inst, rs1: 0, rs2: 0, imm: imm, funct3: 0, funct7: 0 }
 }
 
 // ============= R-Type Instructions (opcode 0x33) =============
@@ -174,18 +174,17 @@ exec_srl(inst DecodedInst) {
     reg_set(inst.rd, metal { u32(reg_get(inst.rs1)) >> shamt5(reg_get(inst.rs2)) })
 }
 
-// TODO: arithmetic vs logical shift
 exec_sra(inst DecodedInst) {
     reg_set(inst.rd, metal { i32(reg_get(inst.rs1)) >> shamt5(reg_get(inst.rs2)) })
 }
 
 exec_slt(inst DecodedInst) {
-    reg_set(inst.rd, lt_to_int(reg_get(inst.rs1), reg_get(inst.rs2)))
+    reg_set(inst.rd, cond { reg_get(inst.rs1) < reg_get(inst.rs2): 1; else: 0 })
 }
 
 exec_sltu(inst DecodedInst) {
     // TODO: unsigned comparison
-    reg_set(inst.rd, lt_to_int(reg_get(inst.rs1), reg_get(inst.rs2)))
+    reg_set(inst.rd, cond { reg_get(inst.rs1) < reg_get(inst.rs2): 1; else: 0 })
 }
 
 // ============= I-Type Instructions (opcode 0x13) =============
@@ -226,19 +225,19 @@ exec_srai(inst DecodedInst) {
 }
 
 exec_slti(inst DecodedInst) {
-    reg_set(inst.rd, lt_to_int(reg_get(inst.rs1), inst.imm))
+    reg_set(inst.rd, cond { reg_get(inst.rs1) < inst.imm: 1; else: 0 })
     print("SLTI")
 }
 
 exec_sltiu(inst DecodedInst) {
     // TODO: unsigned comparison
-    reg_set(inst.rd, lt_to_int(reg_get(inst.rs1), inst.imm))
+    reg_set(inst.rd, cond { reg_get(inst.rs1) < inst.imm: 1; else: 0 })
     print("SLTIU")
 }
 
 exec_jal(inst DecodedInst) {
-    outer pc
-    ret_addr = pc + 4
+    outer cpu
+    ret_addr = cpu.pc + 4
     branch(inst.imm)
     reg_set(inst.rd, ret_addr)
 }
@@ -247,50 +246,40 @@ exec_jal(inst DecodedInst) {
 
 // ============= Dispatch =============
 
-dispatch_i_type(inst DecodedInst) {
-    cond inst.funct3 {
-        0x0: exec_addi(inst)
-        0x4: exec_xori(inst)
-        0x6: exec_ori(inst)
-        0x7: exec_andi(inst)
-        0x1: exec_slli(inst)
-        0x5: cond metal { (inst.imm >> 5) & 0x7F } { 0x00: exec_srli(inst); 0x20: exec_srai(inst) }
-        0x2: exec_slti(inst)
-        0x3: exec_sltiu(inst)
-    }
-}
-
-dispatch_r_type(inst DecodedInst) {
-    cond inst.funct3 {
-        0x0: cond inst.funct7 { 0x00: exec_add(inst); 0x20: exec_sub(inst) }
-        0x1: exec_sll(inst)
-        0x2: exec_slt(inst)
-        0x3: exec_sltu(inst)
-        0x4: exec_xor(inst)
-        0x5: cond inst.funct7 { 0x00: exec_srl(inst); 0x20: exec_sra(inst) }
-        0x6: exec_or(inst)
-        0x7: exec_and(inst)
-    }
-}
-
-dispatch_b_type(inst DecodedInst) {
-    lhs = reg_get(inst.rs1)
-    rhs = reg_get(inst.rs2)
-    cond inst.funct3 {
-        0x0: cond lhs == rhs { branch(inst.imm) }
-        0x1: cond lhs != rhs { branch(inst.imm) }
-        0x4: cond lhs < rhs { branch(inst.imm) }
-        0x5: cond lhs >= rhs { branch(inst.imm) }
-        0x6: cond lhs < rhs { branch(inst.imm) } // TODO: unsigned comparison
-        0x7: cond lhs >= rhs { branch(inst.imm) } // TODO: unsigned comparison
-    }
-}
-
 dispatch(inst DecodedInst) {
     cond inst.opcode {
-        0x33: dispatch_r_type(inst)
-        0x13: dispatch_i_type(inst)
-        0x63: dispatch_b_type(inst)
+        0x33: cond inst.funct3 {
+            0x0: cond inst.funct7 { 0x00: exec_add(inst); 0x20: exec_sub(inst) }
+            0x1: exec_sll(inst)
+            0x2: exec_slt(inst)
+            0x3: exec_sltu(inst)
+            0x4: exec_xor(inst)
+            0x5: cond inst.funct7 { 0x00: exec_srl(inst); 0x20: exec_sra(inst) }
+            0x6: exec_or(inst)
+            0x7: exec_and(inst)
+        }
+        0x13: cond inst.funct3 {
+            0x0: exec_addi(inst)
+            0x4: exec_xori(inst)
+            0x6: exec_ori(inst)
+            0x7: exec_andi(inst)
+            0x1: exec_slli(inst)
+            0x5: cond metal { (inst.imm >> 5) & 0x7F } { 0x00: exec_srli(inst); 0x20: exec_srai(inst) }
+            0x2: exec_slti(inst)
+            0x3: exec_sltiu(inst)
+        }
+        0x63: {
+            lhs = reg_get(inst.rs1)
+            rhs = reg_get(inst.rs2)
+            cond inst.funct3 {
+                0x0: cond lhs == rhs { branch(inst.imm) }
+                0x1: cond lhs != rhs { branch(inst.imm) }
+                0x4: cond lhs < rhs { branch(inst.imm) }
+                0x5: cond lhs >= rhs { branch(inst.imm) }
+                0x6: cond lhs < rhs { branch(inst.imm) } // TODO: unsigned comparison
+                0x7: cond lhs >= rhs { branch(inst.imm) } // TODO: unsigned comparison
+            }
+        }
         0x6F: exec_jal(inst)
     }
 }
