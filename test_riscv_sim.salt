@@ -1,213 +1,6 @@
 // RISC-V RV32I Simulator — Test Suite
+import "./riscv_sim.salt".{decode, dispatch, reg_get, reg_set}
 import metal
-
-// ============= CPU State =============
-
-CPU {
-    regs int[32]
-    pc int
-}
-
-cpu mut = CPU { pc: 0 }
-
-reg_set(i int, val int) {
-    outer mut cpu
-    cond i != 0 { cpu.regs[i] = val }
-}
-
-reg_get(i int) int {
-    outer cpu
-    return cpu.regs[i]
-}
-
-branch(offset int) {
-    outer mut cpu
-    cpu.pc += offset
-}
-
-shamt5(v int) int {
-    return metal { v & 0x1F }
-}
-
-// ============= Decoded Instruction =============
-
-DecodedInst {
-    raw_inst int
-    opcode int
-    rs1 int
-    rs2 int
-    rd int
-    imm int
-    funct3 int
-    funct7 int
-}
-
-// ============= Bitfield Types for Instruction Formats =============
-
-RV32R {
-    opcode 0..6
-    rd 7..11
-    funct3 12..14
-    rs1 15..19
-    rs2 20..24
-    funct7 25..31
-}
-
-RV32I {
-    opcode 0..6
-    rd 7..11
-    funct3 12..14
-    rs1 15..19
-    imm 20..31
-}
-
-RV32S {
-    opcode 0..6
-    imm (7..11, 25..31)
-    funct3 12..14
-    rs1 15..19
-    rs2 20..24
-}
-
-RV32B {
-    opcode 0..6
-    imm_11 7..7
-    imm_4_1 8..11
-    funct3 12..14
-    rs1 15..19
-    rs2 20..24
-    imm_10_5 25..30
-    imm_12 31..31
-}
-
-RV32U {
-    opcode 0..6
-    rd 7..11
-    imm_31_12 12..31
-}
-
-RV32J {
-    opcode 0..6
-    rd 7..11
-    imm_19_12 12..19
-    imm_11 20..20
-    imm_10_1 21..30
-    imm_20 31..31
-}
-
-// ============= Instruction Decoding =============
-
-decode(coded_inst int) DecodedInst or string {
-    opcode = RV32R(coded_inst).opcode
-    return cond {
-        opcode == 0x33: decode_r_type(coded_inst)
-        contains([0x13, 0x03, 0x67, 0x73], opcode): decode_i_type(coded_inst)
-        opcode == 0x23: decode_s_type(coded_inst)
-        opcode == 0x63: decode_b_type(coded_inst)
-        contains([0x37, 0x17], opcode): decode_u_type(coded_inst)
-        opcode == 0x6F: decode_j_type(coded_inst)
-        else: "Instruction could not be decoded"
-    }
-}
-
-decode_r_type(coded_inst int) DecodedInst {
-    return DecodedInst { ...RV32R(coded_inst), raw_inst: coded_inst, imm: 0 }
-}
-
-decode_i_type(coded_inst int) DecodedInst {
-    return DecodedInst { ...RV32I(coded_inst), raw_inst: coded_inst, rs2: 0, funct7: 0 }
-}
-
-decode_s_type(coded_inst int) DecodedInst {
-    return DecodedInst { ...RV32S(coded_inst), raw_inst: coded_inst, rd: 0, funct7: 0 }
-}
-
-decode_b_type(coded_inst int) DecodedInst {
-    b = RV32B(coded_inst)
-    imm = metal { (b.imm_12 << 12) | (b.imm_11 << 11) | (b.imm_10_5 << 5) | (b.imm_4_1 << 1) }
-    return DecodedInst { ...b, raw_inst: coded_inst, rd: 0, imm: imm, funct7: 0 }
-}
-
-decode_u_type(coded_inst int) DecodedInst {
-    u = RV32U(coded_inst)
-    return DecodedInst { ...u, raw_inst: coded_inst, rs1: 0, rs2: 0, imm: metal { u.imm_31_12 << 12 }, funct3: 0, funct7: 0 }
-}
-
-decode_j_type(coded_inst int) DecodedInst {
-    j = RV32J(coded_inst)
-    imm = metal { (j.imm_20 << 20) | (j.imm_19_12 << 12) | (j.imm_11 << 11) | (j.imm_10_1 << 1) }
-    return DecodedInst { ...j, raw_inst: coded_inst, rs1: 0, rs2: 0, imm: imm, funct3: 0, funct7: 0 }
-}
-
-// ============= Execution =============
-
-exec_add(inst DecodedInst) { reg_set(inst.rd, reg_get(inst.rs1) + reg_get(inst.rs2)) }
-exec_sub(inst DecodedInst) { reg_set(inst.rd, reg_get(inst.rs1) - reg_get(inst.rs2)) }
-exec_xor(inst DecodedInst) { reg_set(inst.rd, metal { reg_get(inst.rs1) ^ reg_get(inst.rs2) }) }
-exec_or(inst DecodedInst) { reg_set(inst.rd, metal { reg_get(inst.rs1) | reg_get(inst.rs2) }) }
-exec_and(inst DecodedInst) { reg_set(inst.rd, metal { reg_get(inst.rs1) & reg_get(inst.rs2) }) }
-exec_sll(inst DecodedInst) { reg_set(inst.rd, metal { reg_get(inst.rs1) << shamt5(reg_get(inst.rs2)) }) }
-exec_srl(inst DecodedInst) { reg_set(inst.rd, metal { u32(reg_get(inst.rs1)) >> shamt5(reg_get(inst.rs2)) }) }
-exec_sra(inst DecodedInst) { reg_set(inst.rd, metal { i32(reg_get(inst.rs1)) >> shamt5(reg_get(inst.rs2)) }) }
-exec_slt(inst DecodedInst) { reg_set(inst.rd, cond { reg_get(inst.rs1) < reg_get(inst.rs2): 1; else: 0 }) }
-exec_sltu(inst DecodedInst) { reg_set(inst.rd, cond { reg_get(inst.rs1) < reg_get(inst.rs2): 1; else: 0 }) }
-
-exec_addi(inst DecodedInst) { reg_set(inst.rd, reg_get(inst.rs1) + inst.imm) }
-exec_xori(inst DecodedInst) { reg_set(inst.rd, metal { reg_get(inst.rs1) ^ inst.imm }) }
-exec_andi(inst DecodedInst) { reg_set(inst.rd, metal { reg_get(inst.rs1) & inst.imm }) }
-exec_ori(inst DecodedInst) { reg_set(inst.rd, metal { reg_get(inst.rs1) | inst.imm }) }
-exec_slli(inst DecodedInst) { reg_set(inst.rd, metal { reg_get(inst.rs1) << shamt5(inst.imm) }) }
-exec_srli(inst DecodedInst) { reg_set(inst.rd, metal { u32(reg_get(inst.rs1)) >> shamt5(inst.imm) }) }
-exec_srai(inst DecodedInst) { reg_set(inst.rd, metal { i32(reg_get(inst.rs1)) >> shamt5(inst.imm) }) }
-exec_slti(inst DecodedInst) { reg_set(inst.rd, cond { reg_get(inst.rs1) < inst.imm: 1; else: 0 }) }
-exec_sltiu(inst DecodedInst) { reg_set(inst.rd, cond { reg_get(inst.rs1) < inst.imm: 1; else: 0 }) }
-
-exec_jal(inst DecodedInst) {
-    outer cpu
-    ret_addr = cpu.pc + 4
-    branch(inst.imm)
-    reg_set(inst.rd, ret_addr)
-}
-
-// ============= Dispatch =============
-
-dispatch(inst DecodedInst) {
-    cond inst.opcode {
-        0x33: cond inst.funct3 {
-            0x0: cond inst.funct7 { 0x00: exec_add(inst); 0x20: exec_sub(inst) }
-            0x1: exec_sll(inst)
-            0x2: exec_slt(inst)
-            0x3: exec_sltu(inst)
-            0x4: exec_xor(inst)
-            0x5: cond inst.funct7 { 0x00: exec_srl(inst); 0x20: exec_sra(inst) }
-            0x6: exec_or(inst)
-            0x7: exec_and(inst)
-        }
-        0x13: cond inst.funct3 {
-            0x0: exec_addi(inst)
-            0x4: exec_xori(inst)
-            0x6: exec_ori(inst)
-            0x7: exec_andi(inst)
-            0x1: exec_slli(inst)
-            0x5: cond metal { (inst.imm >> 5) & 0x7F } { 0x00: exec_srli(inst); 0x20: exec_srai(inst) }
-            0x2: exec_slti(inst)
-            0x3: exec_sltiu(inst)
-        }
-        0x63: {
-            lhs = reg_get(inst.rs1)
-            rhs = reg_get(inst.rs2)
-            cond inst.funct3 {
-                0x0: cond lhs == rhs { branch(inst.imm) }
-                0x1: cond lhs != rhs { branch(inst.imm) }
-                0x4: cond lhs < rhs { branch(inst.imm) }
-                0x5: cond lhs >= rhs { branch(inst.imm) }
-                0x6: cond lhs < rhs { branch(inst.imm) }
-                0x7: cond lhs >= rhs { branch(inst.imm) }
-            }
-        }
-        0x6F: exec_jal(inst)
-    }
-}
 
 // ============= Test Harness =============
 
@@ -224,14 +17,22 @@ check(got int, expected int, name string) {
     }
 }
 
+// Encode an R-type instruction word from its fields.
+// R-type layout: [funct7|rs2|rs1|funct3|rd|opcode=0x33]
+// funct3 selects the operation (0=ADD/SUB, 1=SLL, 2=SLT, 4=XOR, 5=SRL/SRA, 6=OR, 7=AND)
+// funct7 disambiguates variants (0x00=normal, 0x20=SUB/SRA)
 encode_r(funct7 int, rs2 int, rs1 int, funct3 int, rd int) int {
     return metal { (funct7 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | 0x33 }
 }
 
+// Encode an I-type instruction word from its fields.
+// I-type layout: [imm(12bit)|rs1|funct3|rd|opcode=0x13]
+// funct3 selects the operation (0=ADDI, 1=SLLI, 2=SLTI, 4=XORI, 5=SRLI/SRAI, 6=ORI, 7=ANDI)
 encode_i(imm int, rs1 int, funct3 int, rd int) int {
     return metal { (imm << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | 0x13 }
 }
 
+// Decode and execute a single instruction word.
 run(coded_inst int) {
     for _ in [0] {
         inst = decode(coded_inst) else { break }
@@ -240,80 +41,109 @@ run(coded_inst int) {
 }
 
 // ============= Tests =============
+// All tests use x1=42 and x2=10 as base operands.
+// Each instruction writes its result to a different destination register (x3..x25)
+// so tests don't interfere with each other.
 
-// --- Setup: x1 = 42, x2 = 10 ---
-run(encode_i(42, 0, 0, 1))
-run(encode_i(10, 0, 0, 2))
+// --- ADDI: set up base registers ---
+// ADDI rd, rs1, imm: rd = rs1 + imm
+run(encode_i(42, 0, 0, 1))   // x1 = x0 + 42 = 42
+run(encode_i(10, 0, 0, 2))   // x2 = x0 + 10 = 10
 check(reg_get(1), 42, "ADDI x1, x0, 42")
 check(reg_get(2), 10, "ADDI x2, x0, 10")
 
-// --- R-Type ---
+// --- R-Type: register-register operations ---
+
+// ADD: x3 = x1 + x2 = 42 + 10 = 52
 run(encode_r(0x00, 2, 1, 0, 3))
 check(reg_get(3), 52, "ADD 42+10")
 
+// SUB: x4 = x1 - x2 = 42 - 10 = 32 (funct7=0x20 selects SUB over ADD)
 run(encode_r(0x20, 2, 1, 0, 4))
 check(reg_get(4), 32, "SUB 42-10")
 
+// XOR: x5 = x1 ^ x2 = 0b101010 ^ 0b001010 = 0b100000 = 32
 run(encode_r(0, 2, 1, 4, 5))
 check(reg_get(5), 32, "XOR 42^10")
 
+// OR: x6 = x1 | x2 = 0b101010 | 0b001010 = 0b101010 = 42
 run(encode_r(0, 2, 1, 6, 6))
 check(reg_get(6), 42, "OR 42|10")
 
+// AND: x7 = x1 & x2 = 0b101010 & 0b001010 = 0b001010 = 10
 run(encode_r(0, 2, 1, 7, 7))
 check(reg_get(7), 10, "AND 42&10")
 
+// SLL: x8 = x1 << (x2 & 0x1F) = 42 << 10 = 43008
 run(encode_r(0, 2, 1, 1, 8))
 check(reg_get(8), 43008, "SLL 42<<10")
 
+// SRL: logical shift right. First set x9=1 as shift amount.
+// x10 = x1 >> (x9 & 0x1F) = 42 >> 1 = 21
 run(encode_i(1, 0, 0, 9))
 run(encode_r(0, 9, 1, 5, 10))
 check(reg_get(10), 21, "SRL 42>>1")
 
+// SRA: arithmetic shift right (funct7=0x20 selects SRA over SRL)
+// x11 = x1 >>> (x9 & 0x1F) = 42 >> 1 = 21 (same as SRL for positive values)
 run(encode_r(0x20, 9, 1, 5, 11))
 check(reg_get(11), 21, "SRA 42>>1")
 
+// SLT: set less than. x12 = (x1 < x2) ? 1 : 0 = (42 < 10) ? 1 : 0 = 0
 run(encode_r(0, 2, 1, 2, 12))
 check(reg_get(12), 0, "SLT 42<10")
 
+// SLT reversed: x13 = (x2 < x1) ? 1 : 0 = (10 < 42) ? 1 : 0 = 1
 run(encode_r(0, 1, 2, 2, 13))
 check(reg_get(13), 1, "SLT 10<42")
 
-// --- I-Type ---
+// --- I-Type: register-immediate operations ---
+
+// XORI: x14 = x1 ^ 0xFF = 42 ^ 255 = 213
 run(encode_i(0xFF, 1, 4, 14))
 check(reg_get(14), metal { 42 ^ 0xFF }, "XORI 42^0xFF")
 
+// ORI: x15 = x1 | 0x0F = 42 | 15 = 47
 run(encode_i(0x0F, 1, 6, 15))
 check(reg_get(15), metal { 42 | 0x0F }, "ORI 42|0x0F")
 
+// ANDI: x16 = x1 & 0x0F = 42 & 15 = 10 (keep low nibble)
 run(encode_i(0x0F, 1, 7, 16))
 check(reg_get(16), metal { 42 & 0x0F }, "ANDI 42&0x0F")
 
+// SLLI: x17 = x1 << 3 = 42 * 8 = 336
 run(encode_i(3, 1, 1, 17))
 check(reg_get(17), 336, "SLLI 42<<3")
 
+// SRLI: x18 = x1 >> 1 = 42 / 2 = 21
 run(encode_i(1, 1, 5, 18))
 check(reg_get(18), 21, "SRLI 42>>1")
 
+// SRAI: arithmetic right shift. imm[11:5]=0x20 selects SRAI over SRLI.
+// x19 = x1 >>> 1 = 42 / 2 = 21 (same as SRLI for positive values)
 run(encode_i(metal { 0x20 << 5 | 1 }, 1, 5, 19))
 check(reg_get(19), 21, "SRAI 42>>1")
 
+// SLTI: x20 = (x1 < 100) ? 1 : 0 = (42 < 100) = 1
 run(encode_i(100, 1, 2, 20))
 check(reg_get(20), 1, "SLTI 42<100")
 
+// SLTI: x21 = (x1 < 10) ? 1 : 0 = (42 < 10) = 0
 run(encode_i(10, 1, 2, 21))
 check(reg_get(21), 0, "SLTI 42<10")
 
 // --- x0 hardwire ---
-run(encode_i(99, 0, 0, 0))
+// In RISC-V, register x0 is hardwired to zero. Writing to it must have no effect.
+run(encode_i(99, 0, 0, 0))   // ADDI x0, x0, 99 — tries to set x0 = 99
 check(reg_get(0), 0, "x0 stays zero")
 
-// --- Chained computation ---
-run(encode_i(8, 0, 0, 22))
-run(encode_i(13, 0, 0, 23))
-run(encode_r(0, 23, 22, 0, 24))
+// --- Chained computation: fibonacci-like sequence ---
+// Verifies that results from one instruction can be used by the next.
+run(encode_i(8, 0, 0, 22))              // x22 = 8
+run(encode_i(13, 0, 0, 23))             // x23 = 13
+run(encode_r(0, 23, 22, 0, 24))         // x24 = x22 + x23 = 8 + 13 = 21
 check(reg_get(24), 21, "ADD 8+13")
-run(encode_r(0, 24, 23, 0, 25))
+run(encode_r(0, 24, 23, 0, 25))         // x25 = x23 + x24 = 13 + 21 = 34
 check(reg_get(25), 34, "ADD 13+21")
 
 // --- Summary ---
