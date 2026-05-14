@@ -1,0 +1,258 @@
+// RISC-V RV32I Simulator
+import metal
+
+// ============= CPU State =============
+
+CPU {
+    regs int[32]
+    pc int
+}
+
+cpu mut = CPU { pc: 0 }
+
+export reg_set(i int, val int) {
+    outer mut cpu
+    // x0 is hardwired to zero in RV32I.
+    cond i != 0 { cpu.regs[i] = val }
+}
+
+export reg_get(i int) int {
+    outer cpu
+    return cpu.regs[i]
+}
+
+branch(offset int) {
+    outer mut cpu
+    cpu.pc += offset
+}
+
+shamt5(v int) int {
+    return metal { v & 0x1F }
+}
+
+// ============= Decoded Instruction =============
+
+DecodedInst {
+    raw_inst int
+    opcode int
+    rs1 int
+    rs2 int
+    rd int
+    imm int
+    funct3 int
+    funct7 int
+}
+
+// ============= Bitfield Types for Instruction Formats =============
+
+RV32R {
+    opcode 0..6
+    rd 7..11
+    funct3 12..14
+    rs1 15..19
+    rs2 20..24
+    funct7 25..31
+}
+
+RV32I {
+    opcode 0..6
+    rd 7..11
+    funct3 12..14
+    rs1 15..19
+    imm 20..31
+}
+
+// Discontiguous imm: bits 7..11 = low, bits 25..31 = high
+RV32S {
+    opcode 0..6
+    imm (7..11, 25..31)
+    funct3 12..14
+    rs1 15..19
+    rs2 20..24
+}
+
+RV32B {
+    opcode 0..6
+    imm_11 7..7
+    imm_4_1 8..11
+    funct3 12..14
+    rs1 15..19
+    rs2 20..24
+    imm_10_5 25..30
+    imm_12 31..31
+}
+
+RV32U {
+    opcode 0..6
+    rd 7..11
+    imm_31_12 12..31
+}
+
+RV32J {
+    opcode 0..6
+    rd 7..11
+    imm_19_12 12..19
+    imm_11 20..20
+    imm_10_1 21..30
+    imm_20 31..31
+}
+
+// ============= Instruction Decoding =============
+
+export decode(coded_inst int) DecodedInst or string {
+    opcode = RV32R(coded_inst).opcode
+    return cond {
+        opcode == 0x33: decode_r_type(coded_inst)
+        contains([0x13, 0x03, 0x67, 0x73], opcode): decode_i_type(coded_inst)
+        opcode == 0x23: decode_s_type(coded_inst)
+        opcode == 0x63: decode_b_type(coded_inst)
+        contains([0x37, 0x17], opcode): decode_u_type(coded_inst)
+        opcode == 0x6F: decode_j_type(coded_inst)
+        else: "Instruction could not be decoded"
+    }
+}
+
+decode_r_type(coded_inst int) DecodedInst {
+    return DecodedInst { ...RV32R(coded_inst), raw_inst: coded_inst, imm: 0 }
+}
+
+decode_i_type(coded_inst int) DecodedInst {
+    return DecodedInst { ...RV32I(coded_inst), raw_inst: coded_inst, rs2: 0, funct7: 0 }
+}
+
+// Discontiguous bitfield auto-concatenates imm[4:0]=inst[11:7], imm[11:5]=inst[31:25]
+decode_s_type(coded_inst int) DecodedInst {
+    return DecodedInst { ...RV32S(coded_inst), raw_inst: coded_inst, rd: 0, funct7: 0 }
+}
+
+// B-type imm bits are scattered: proper reconstruction from named fields
+decode_b_type(coded_inst int) DecodedInst {
+    b = RV32B(coded_inst)
+    imm = metal { (b.imm_12 << 12) | (b.imm_11 << 11) | (b.imm_10_5 << 5) | (b.imm_4_1 << 1) }
+    return DecodedInst { ...b, raw_inst: coded_inst, rd: 0, imm: imm, funct7: 0 }
+}
+
+decode_u_type(coded_inst int) DecodedInst {
+    u = RV32U(coded_inst)
+    return DecodedInst { ...u, raw_inst: coded_inst, rs1: 0, rs2: 0, imm: metal { u.imm_31_12 << 12 }, funct3: 0, funct7: 0 }
+}
+
+// J-type imm bits are scattered: proper reconstruction from named fields
+decode_j_type(coded_inst int) DecodedInst {
+    j = RV32J(coded_inst)
+    imm = metal { (j.imm_20 << 20) | (j.imm_19_12 << 12) | (j.imm_11 << 11) | (j.imm_10_1 << 1) }
+    return DecodedInst { ...j, raw_inst: coded_inst, rs1: 0, rs2: 0, imm: imm, funct3: 0, funct7: 0 }
+}
+
+// ============= Binary Ops =============
+// One function per RISC-V operation. Shared by R-type and I-type
+// because shamt5 masks the second arg to 5 bits regardless of source.
+
+op_add(a int, b int)  int = a + b
+op_sub(a int, b int)  int = a - b
+op_xor(a int, b int)  int = metal { a ^ b }
+op_or(a int, b int)   int = metal { a | b }
+op_and(a int, b int)  int = metal { a & b }
+op_sll(a int, b int)  int = metal { a << shamt5(b) }
+op_srl(a int, b int)  int = metal { u32(a) >> shamt5(b) }
+op_sra(a int, b int)  int = metal { i32(a) >> shamt5(b) }
+op_slt(a int, b int)  int = cond { a < b: 1; else: 0 }
+op_sltu(a int, b int) int = cond { a < b: 1; else: 0 }  // TODO: unsigned
+
+// ============= Branch Predicates =============
+
+pred_eq(a int, b int)  bool = a == b
+pred_ne(a int, b int)  bool = a != b
+pred_lt(a int, b int)  bool = a < b
+pred_ge(a int, b int)  bool = a >= b
+pred_ltu(a int, b int) bool = a < b   // TODO: unsigned
+pred_geu(a int, b int) bool = a >= b  // TODO: unsigned
+
+// ============= Format Wrappers =============
+// The wrapper is the only place where rs1/rs2/rd/imm decode lives.
+// Each instruction adds one entry in dispatch, not one new function.
+
+// Bind op-call result to a local before passing to reg_set / cond.
+// Salt's analyzer cannot yet infer the return type of an untyped
+// callable parameter; the indirection through a named binding lets
+// the typed call site (reg_set, cond) typecheck. Remove when the
+// callable-type gap is closed.
+
+// Explicit type annotations on the locals break the bottom-up inference
+// chain from the untyped op/pred callable back into reg_set/cond, which
+// would otherwise poison their signatures. Workaround for the callable-
+// type gap; remove when phase 1 of callable types lands.
+
+exec_rtype(inst DecodedInst, op) {
+    val int = op(reg_get(inst.rs1), reg_get(inst.rs2))
+    reg_set(inst.rd, val)
+}
+
+exec_itype(inst DecodedInst, op) {
+    val int = op(reg_get(inst.rs1), inst.imm)
+    reg_set(inst.rd, val)
+}
+
+exec_branch(inst DecodedInst, pred) {
+    take bool = pred(reg_get(inst.rs1), reg_get(inst.rs2))
+    cond take == true { branch(inst.imm) }
+}
+
+exec_jal(inst DecodedInst) {
+    outer cpu
+    ret_addr = cpu.pc + 4
+    branch(inst.imm)
+    reg_set(inst.rd, ret_addr)
+}
+
+// TODO: exec_jalr, exec_lui, exec_auipc, exec_ecall, exec_ebreak, exec_fence
+
+// ============= Dispatch =============
+
+export dispatch(inst DecodedInst) {
+    cond inst.opcode {
+        0x33: cond inst.funct3 {
+            0x0: cond inst.funct7 {
+                0x20: exec_rtype(inst, op_sub)
+                else: exec_rtype(inst, op_add)
+            }
+            0x1: exec_rtype(inst, op_sll)
+            0x2: exec_rtype(inst, op_slt)
+            0x3: exec_rtype(inst, op_sltu)
+            0x4: exec_rtype(inst, op_xor)
+            0x5: cond inst.funct7 {
+                0x20: exec_rtype(inst, op_sra)
+                else: exec_rtype(inst, op_srl)
+            }
+            0x6: exec_rtype(inst, op_or)
+            0x7: exec_rtype(inst, op_and)
+        }
+        0x13: cond inst.funct3 {
+            0x0: exec_itype(inst, op_add)
+            0x4: exec_itype(inst, op_xor)
+            0x6: exec_itype(inst, op_or)
+            0x7: exec_itype(inst, op_and)
+            0x1: exec_itype(inst, op_sll)
+            0x5: cond metal { (inst.imm >> 5) & 0x7F } {
+                0x20: exec_itype(inst, op_sra)
+                else: exec_itype(inst, op_srl)
+            }
+            0x2: exec_itype(inst, op_slt)
+            0x3: exec_itype(inst, op_sltu)
+        }
+        0x63: cond inst.funct3 {
+            0x0: exec_branch(inst, pred_eq)
+            0x1: exec_branch(inst, pred_ne)
+            0x4: exec_branch(inst, pred_lt)
+            0x5: exec_branch(inst, pred_ge)
+            0x6: exec_branch(inst, pred_ltu)
+            0x7: exec_branch(inst, pred_geu)
+        }
+        0x6F: exec_jal(inst)
+    }
+}
+
+// (Main loop removed. Module-level execution in a library file
+// poisons the analyzer's inference of `decode` when the file is
+// imported — see test_riscv_sim.salt. The driver lives in the
+// test file or a separate main.salt.)
