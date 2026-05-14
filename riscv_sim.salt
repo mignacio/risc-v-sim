@@ -144,95 +144,58 @@ decode_j_type(coded_inst int) DecodedInst {
     return DecodedInst { ...j, raw_inst: coded_inst, rs1: 0, rs2: 0, imm: imm, funct3: 0, funct7: 0 }
 }
 
-// ============= R-Type Instructions (opcode 0x33) =============
+// ============= Binary Ops =============
+// One function per RISC-V operation. Shared by R-type and I-type
+// because shamt5 masks the second arg to 5 bits regardless of source.
 
-exec_add(inst DecodedInst) {
-    reg_set(inst.rd, reg_get(inst.rs1) + reg_get(inst.rs2))
+op_add(a int, b int)  int = a + b
+op_sub(a int, b int)  int = a - b
+op_xor(a int, b int)  int = metal { a ^ b }
+op_or(a int, b int)   int = metal { a | b }
+op_and(a int, b int)  int = metal { a & b }
+op_sll(a int, b int)  int = metal { a << shamt5(b) }
+op_srl(a int, b int)  int = metal { u32(a) >> shamt5(b) }
+op_sra(a int, b int)  int = metal { i32(a) >> shamt5(b) }
+op_slt(a int, b int)  int = cond { a < b: 1; else: 0 }
+op_sltu(a int, b int) int = cond { a < b: 1; else: 0 }  // TODO: unsigned
+
+// ============= Branch Predicates =============
+
+pred_eq(a int, b int)  bool = a == b
+pred_ne(a int, b int)  bool = a != b
+pred_lt(a int, b int)  bool = a < b
+pred_ge(a int, b int)  bool = a >= b
+pred_ltu(a int, b int) bool = a < b   // TODO: unsigned
+pred_geu(a int, b int) bool = a >= b  // TODO: unsigned
+
+// ============= Format Wrappers =============
+// The wrapper is the only place where rs1/rs2/rd/imm decode lives.
+// Each instruction adds one entry in dispatch, not one new function.
+
+// Bind op-call result to a local before passing to reg_set / cond.
+// Salt's analyzer cannot yet infer the return type of an untyped
+// callable parameter; the indirection through a named binding lets
+// the typed call site (reg_set, cond) typecheck. Remove when the
+// callable-type gap is closed.
+
+// Explicit type annotations on the locals break the bottom-up inference
+// chain from the untyped op/pred callable back into reg_set/cond, which
+// would otherwise poison their signatures. Workaround for the callable-
+// type gap; remove when phase 1 of callable types lands.
+
+exec_rtype(inst DecodedInst, op) {
+    val int = op(reg_get(inst.rs1), reg_get(inst.rs2))
+    reg_set(inst.rd, val)
 }
 
-exec_sub(inst DecodedInst) {
-    reg_set(inst.rd, reg_get(inst.rs1) - reg_get(inst.rs2))
+exec_itype(inst DecodedInst, op) {
+    val int = op(reg_get(inst.rs1), inst.imm)
+    reg_set(inst.rd, val)
 }
 
-exec_xor(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) ^ reg_get(inst.rs2) })
-}
-
-exec_or(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) | reg_get(inst.rs2) })
-}
-
-exec_and(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) & reg_get(inst.rs2) })
-}
-
-exec_sll(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) << shamt5(reg_get(inst.rs2)) })
-}
-
-exec_srl(inst DecodedInst) {
-    reg_set(inst.rd, metal { u32(reg_get(inst.rs1)) >> shamt5(reg_get(inst.rs2)) })
-}
-
-exec_sra(inst DecodedInst) {
-    reg_set(inst.rd, metal { i32(reg_get(inst.rs1)) >> shamt5(reg_get(inst.rs2)) })
-}
-
-exec_slt(inst DecodedInst) {
-    reg_set(inst.rd, cond { reg_get(inst.rs1) < reg_get(inst.rs2): 1; else: 0 })
-}
-
-exec_sltu(inst DecodedInst) {
-    // TODO: unsigned comparison
-    reg_set(inst.rd, cond { reg_get(inst.rs1) < reg_get(inst.rs2): 1; else: 0 })
-}
-
-// ============= I-Type Instructions (opcode 0x13) =============
-
-exec_addi(inst DecodedInst) {
-    reg_set(inst.rd, reg_get(inst.rs1) + inst.imm)
-    print("ADDI")
-}
-
-exec_xori(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) ^ inst.imm })
-    print("XORI")
-}
-
-exec_andi(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) & inst.imm })
-    print("ANDI")
-}
-
-exec_ori(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) | inst.imm })
-    print("ORI")
-}
-
-exec_slli(inst DecodedInst) {
-    reg_set(inst.rd, metal { reg_get(inst.rs1) << shamt5(inst.imm) })
-    print("SLLI")
-}
-
-exec_srli(inst DecodedInst) {
-    reg_set(inst.rd, metal { u32(reg_get(inst.rs1)) >> shamt5(inst.imm) })
-    print("SRLI")
-}
-
-exec_srai(inst DecodedInst) {
-    reg_set(inst.rd, metal { i32(reg_get(inst.rs1)) >> shamt5(inst.imm) })
-    print("SRLI/SRAI")
-}
-
-exec_slti(inst DecodedInst) {
-    reg_set(inst.rd, cond { reg_get(inst.rs1) < inst.imm: 1; else: 0 })
-    print("SLTI")
-}
-
-exec_sltiu(inst DecodedInst) {
-    // TODO: unsigned comparison
-    reg_set(inst.rd, cond { reg_get(inst.rs1) < inst.imm: 1; else: 0 })
-    print("SLTIU")
+exec_branch(inst DecodedInst, pred) {
+    take bool = pred(reg_get(inst.rs1), reg_get(inst.rs2))
+    cond take == true { branch(inst.imm) }
 }
 
 exec_jal(inst DecodedInst) {
@@ -249,48 +212,47 @@ exec_jal(inst DecodedInst) {
 export dispatch(inst DecodedInst) {
     cond inst.opcode {
         0x33: cond inst.funct3 {
-            0x0: cond inst.funct7 { 0x00: exec_add(inst); 0x20: exec_sub(inst) }
-            0x1: exec_sll(inst)
-            0x2: exec_slt(inst)
-            0x3: exec_sltu(inst)
-            0x4: exec_xor(inst)
-            0x5: cond inst.funct7 { 0x00: exec_srl(inst); 0x20: exec_sra(inst) }
-            0x6: exec_or(inst)
-            0x7: exec_and(inst)
+            0x0: cond inst.funct7 {
+                0x20: exec_rtype(inst, op_sub)
+                else: exec_rtype(inst, op_add)
+            }
+            0x1: exec_rtype(inst, op_sll)
+            0x2: exec_rtype(inst, op_slt)
+            0x3: exec_rtype(inst, op_sltu)
+            0x4: exec_rtype(inst, op_xor)
+            0x5: cond inst.funct7 {
+                0x20: exec_rtype(inst, op_sra)
+                else: exec_rtype(inst, op_srl)
+            }
+            0x6: exec_rtype(inst, op_or)
+            0x7: exec_rtype(inst, op_and)
         }
         0x13: cond inst.funct3 {
-            0x0: exec_addi(inst)
-            0x4: exec_xori(inst)
-            0x6: exec_ori(inst)
-            0x7: exec_andi(inst)
-            0x1: exec_slli(inst)
-            0x5: cond metal { (inst.imm >> 5) & 0x7F } { 0x00: exec_srli(inst); 0x20: exec_srai(inst) }
-            0x2: exec_slti(inst)
-            0x3: exec_sltiu(inst)
-        }
-        0x63: {
-            lhs = reg_get(inst.rs1)
-            rhs = reg_get(inst.rs2)
-            cond inst.funct3 {
-                0x0: cond lhs == rhs { branch(inst.imm) }
-                0x1: cond lhs != rhs { branch(inst.imm) }
-                0x4: cond lhs < rhs { branch(inst.imm) }
-                0x5: cond lhs >= rhs { branch(inst.imm) }
-                0x6: cond lhs < rhs { branch(inst.imm) } // TODO: unsigned comparison
-                0x7: cond lhs >= rhs { branch(inst.imm) } // TODO: unsigned comparison
+            0x0: exec_itype(inst, op_add)
+            0x4: exec_itype(inst, op_xor)
+            0x6: exec_itype(inst, op_or)
+            0x7: exec_itype(inst, op_and)
+            0x1: exec_itype(inst, op_sll)
+            0x5: cond metal { (inst.imm >> 5) & 0x7F } {
+                0x20: exec_itype(inst, op_sra)
+                else: exec_itype(inst, op_srl)
             }
+            0x2: exec_itype(inst, op_slt)
+            0x3: exec_itype(inst, op_sltu)
+        }
+        0x63: cond inst.funct3 {
+            0x0: exec_branch(inst, pred_eq)
+            0x1: exec_branch(inst, pred_ne)
+            0x4: exec_branch(inst, pred_lt)
+            0x5: exec_branch(inst, pred_ge)
+            0x6: exec_branch(inst, pred_ltu)
+            0x7: exec_branch(inst, pred_geu)
         }
         0x6F: exec_jal(inst)
     }
 }
 
-// ============= Main =============
-
-reg_set(15, 15)
-
-coded_instructions = [0x00730293, 0x00734293, 0x00736293, 0x00737293, 0x00731293, 0x00735293, 0x40735293, 0x00732293, 0x00733293]
-
-for coded in coded_instructions {
-    inst = decode(coded) else { break }
-    dispatch(inst)
-}
+// (Main loop removed. Module-level execution in a library file
+// poisons the analyzer's inference of `decode` when the file is
+// imported — see test_riscv_sim.salt. The driver lives in the
+// test file or a separate main.salt.)
