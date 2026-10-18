@@ -4,8 +4,11 @@ pub const REGISTER_LENGTH: i32 = 32;
 pub const REGISTER_WIDTH: i32 = 32;
 
 //TODO: Find a way to avoid having to use static mut
-static mut REGISTERS: [i32; 32] = [0; 32];
+// Create a struct with IMPLs to read and write from the registers
+// Add x0 that ignores writes and is always `0`.
+// Make it also hold the program_counter register.
 
+static mut REGISTERS: [i32; 32] = [0; 32];
 pub static mut PROGRAM_COUNTER: u32 = 0;
 
 #[allow(dead_code)]
