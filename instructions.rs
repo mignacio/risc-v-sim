@@ -2,29 +2,18 @@ pub mod registers;
 
 pub mod instruction_types;
 
-extern crate phf;
-use phf::phf_map;
-
 pub type InstFunc = fn(instruction_types::DecodedInst);
 
-#[allow(dead_code)]
-pub static I_CODES: phf::Map<i32, InstFunc> = phf_map!{
-    0x0i32 => addi,
-    0x4i32 => xori,
-    0x6i32 => ori,
-    0x7i32 => andi,
-    0x1i32 => slli,
-    0x5i32 => srai,
-    0x2i32 => slti,
-    0x3i32 => sltiu
-};
+pub fn nop(_instruction: instruction_types::DecodedInst){
+
+}
 
 //RV32I instruction set functions sorted by opcode.
 // TYPE R - OPCODE 0110011
 #[allow(dead_code)]
 pub fn add(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
+    let operand1: u32 = registers::get(instruction.rs1);
+    let operand2: u32 = registers::get(instruction.rs2);
     registers::set(instruction.rd, operand1 + operand2);
 }
 #[allow(dead_code)]
@@ -93,7 +82,7 @@ pub fn sltu(instruction: instruction_types::DecodedInst){
 // TYPE - I OPCODE 0010011
 #[allow(dead_code)]
 pub fn addi(instruction: instruction_types::DecodedInst){
-    let rs1 = registers::get(instruction.rs1);
+    let rs1: u32 = registers::get(instruction.rs1);
     registers::set(instruction.rd, rs1 + instruction.imm);
     println!("ADDI");
 }

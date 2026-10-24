@@ -1,7 +1,7 @@
 mod instructions;
 
 use std::env;
-// use instructions::instruction_types::DecodedInst;
+use instructions::instruction_types::*;
 // use instructions::InstFunc;
 
 pub struct Registers {
@@ -58,10 +58,10 @@ impl Cpu {
 
     pub fn step(&mut self) -> Result<u32, CpuFault> {
         let fetch_res: u32 = self.fetch(self.regs.program_counter)?;
+        let decoded: DecodedInst = self.decode(fetch_res)?;
+        self.execute(decoded);
+        self.regs.step();
         Ok(fetch_res)
-        // self.decode();
-        // self.execute();
-        // self.regs.step();
     }
 
     fn fetch(&mut self, program_counter: u32) -> Result<u32, CpuFault> {
@@ -82,12 +82,23 @@ impl Cpu {
         }
     }
 
-    fn decode(&mut self) {
-
+    fn decode(&mut self, raw_inst: u32) -> Result<instructions::instruction_types::DecodedInst, CpuFault>{
+        instructions::instruction_types::DecodedInst::decode(raw_inst)
+            .map_err(|_| CpuFault::DecodeError)
     }
 
-    fn execute(&mut self) {
-
+    fn execute(&mut self, decoded_inst: DecodedInst) {
+        match decoded_inst.funct3 {
+            0x0u32 => instructions::addi,
+            0x4u32 => instructions::xori,
+            0x6u32 => instructions::ori,
+            0x7u32 => instructions::andi,
+            0x1u32 => instructions::slli,
+            0x5u32 => instructions::srai,
+            0x2u32 => instructions::slti,
+            0x3u32 => instructions::sltiu,
+            8_u32..=u32::MAX => todo!()
+        };
     }
 }
 

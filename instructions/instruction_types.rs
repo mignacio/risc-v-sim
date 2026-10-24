@@ -1,17 +1,17 @@
 pub struct DecodedInst{
-    pub raw_inst:   i32, // Raw instruction.
-    pub opcode:     i32, // Opcode field.
-    pub rs1:        i32, // Source register 1.
-    pub rs2:        i32, // Source register 2.
-    pub rd:         i32, // Destination register.
-    pub imm:        i32, // Sign extended immediate value for I type.
-    pub funct3:     i32, // Sub-function value I type.
-    pub funct7:     i32, // Sub-function value R type
+    pub raw_inst:   u32, // Raw instruction.
+    pub opcode:     u32, // Opcode field.
+    pub rs1:        u32, // Source register 1.
+    pub rs2:        u32, // Source register 2.
+    pub rd:         u32, // Destination register.
+    pub imm:        u32, // Sign extended immediate value for I type.
+    pub funct3:     u32, // Sub-function value I type.
+    pub funct7:     u32, // Sub-function value R type
 }
 
 impl DecodedInst {
-    pub fn decode(coded_inst: i32) -> Result<DecodedInst, String> {
-        let opcode: i32 = coded_inst & 0b0000000000000000000000001111111;
+    pub fn decode(coded_inst: u32) -> Result<DecodedInst, String> {
+        let opcode: u32 = coded_inst & 0b0000000000000000000000001111111;
         if opcode == 0b0110011 {         // R Type
             Ok(decode_r_type(coded_inst))
         }else if opcode == 0b0010011 || opcode == 0b0000011 || opcode == 0b1100111 || opcode == 0b1110011 {  // I Type
@@ -43,7 +43,7 @@ impl DecodedInst {
 }
 
 
-fn decode_r_type(coded_inst: i32) -> DecodedInst{
+fn decode_r_type(coded_inst: u32) -> DecodedInst{
     DecodedInst{
         raw_inst: coded_inst,
         opcode: (coded_inst & 0b0000000000000000000000001111111),
@@ -56,7 +56,7 @@ fn decode_r_type(coded_inst: i32) -> DecodedInst{
     }
 }
 
-fn decode_i_type(coded_inst: i32) -> DecodedInst{
+fn decode_i_type(coded_inst: u32) -> DecodedInst{
     DecodedInst{
         raw_inst: coded_inst,
         opcode: (coded_inst & 0b0000000000000000000000001111111),
@@ -69,7 +69,7 @@ fn decode_i_type(coded_inst: i32) -> DecodedInst{
     }
 }
 
-fn decode_s_type(coded_inst: i32) -> DecodedInst{
+fn decode_s_type(coded_inst: u32) -> DecodedInst{
     DecodedInst{
         raw_inst: coded_inst,
         opcode: (coded_inst & 0b0000000000000000000000001111111),
@@ -82,7 +82,7 @@ fn decode_s_type(coded_inst: i32) -> DecodedInst{
     }
 }
 
-fn decode_b_type(coded_inst: i32) -> DecodedInst{
+fn decode_b_type(coded_inst: u32) -> DecodedInst{
     DecodedInst{
         raw_inst: coded_inst,
         opcode: (coded_inst & 0b0000000000000000000000001111111),
@@ -95,7 +95,7 @@ fn decode_b_type(coded_inst: i32) -> DecodedInst{
     }
 }
 
-fn decode_u_type(coded_inst: i32) -> DecodedInst{
+fn decode_u_type(coded_inst: u32) -> DecodedInst{
     DecodedInst{
         raw_inst: coded_inst,
         opcode: (coded_inst & 0b0000000000000000000000001111111),
@@ -108,7 +108,7 @@ fn decode_u_type(coded_inst: i32) -> DecodedInst{
     }
 }
 
-fn decode_j_type(coded_inst: i32) -> DecodedInst{
+fn decode_j_type(coded_inst: u32) -> DecodedInst{
     DecodedInst{
         raw_inst: coded_inst,
         opcode: (coded_inst & 0b0000000000000000000000001111111),
