@@ -1,4 +1,3 @@
-
 pub struct Registers {
     regs: [u32; 32],
     program_counter: u32,
@@ -27,6 +26,12 @@ impl Registers {
         self.regs[index] = 0;
     }
 
+    fn clear_all(&mut self) {
+        for indx in 0..32 {
+            self.clear(indx);
+        }
+    }
+
     fn step(&mut self) {
         self.program_counter+=1;
     }
@@ -48,7 +53,7 @@ pub enum CpuFault {
 const MEM_SIZE: u32 = 0xFFFFFFFF; //Placeholder for now
 impl Cpu {
     pub fn reset(&mut self) {
-
+        self.regs.clear_all();
     }
 
     pub fn step(&mut self) -> Result<u32, CpuFault> {
@@ -77,8 +82,8 @@ impl Cpu {
         }
     }
 
-    fn decode(&mut self, raw_inst: u32) -> Result<instruction_types::DecodedInst, CpuFault>{
-        instruction_types::DecodedInst::decode(raw_inst)
+    fn decode(&mut self, raw_inst: u32) -> Result<DecodedInst, CpuFault>{
+        DecodedInst::decode(raw_inst)
             .map_err(|_| CpuFault::DecodeError)
     }
 
@@ -95,140 +100,144 @@ impl Cpu {
             8_u32..=u32::MAX => todo!()
         };
     }
+
+    fn load_memory(&mut self, memory: Vec<u32>){
+        self.memory = memory;
+    }
 }
 
-pub fn nop(_instruction: instruction_types::DecodedInst){
+pub fn nop(cpu: &mut Cpu, instruction: &DecodedInst){
 
 }
 
 //RV32I instruction set functions sorted by opcode.
 // TYPE R - OPCODE 0110011
 #[allow(dead_code)]
-pub fn add(cpu: &mut Cpu){
-    let operand1: u32 = registers::get(instruction.rs1);
-    let operand2: u32 = registers::get(instruction.rs2);
-    registers::set(instruction.rd, operand1 + operand2);
+pub fn add(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1: u32 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2: u32 = cpu.regs.get(instruction.rs2 as usize);
+    cpu.regs.set(instruction.rd as usize, operand1 + operand2);
 }
 #[allow(dead_code)]
-pub fn sub(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
-    registers::set(instruction.rd, operand1 - operand2);
+pub fn sub(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1: u32 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2: u32 = cpu.regs.get(instruction.rs2 as usize);
+    cpu.regs.set(instruction.rd as usize, operand1 - operand2);
 }
 #[allow(dead_code)]
-pub fn xor(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
-    registers::set(instruction.rd, operand1 ^ operand2);
+pub fn xor(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1: u32 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2: u32 = cpu.regs.get(instruction.rs2 as usize);
+    cpu.regs.set(instruction.rd as usize, operand1 ^ operand2);
 }
 #[allow(dead_code)]
-pub fn or(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
-    registers::set(instruction.rd, operand1 | operand2);
+pub fn or(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2 = cpu.regs.get(instruction.rs2 as usize);
+    cpu.regs.set(instruction.rd as usize, operand1 | operand2);
 }
 #[allow(dead_code)]
-pub fn and(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
-    registers::set(instruction.rd, operand1 & operand2);
+pub fn and(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2 = cpu.regs.get(instruction.rs2 as usize);
+    cpu.regs.set(instruction.rd as usize, operand1 & operand2);
 }
 #[allow(dead_code)]
-pub fn sll(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
+pub fn sll(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2 = cpu.regs.get(instruction.rs2 as usize);
     // Logical shift left source1 by the value stored in the lowest 5 bits of source2.
-    registers::set(instruction.rd, operand1 << (operand2 & 0x20));
+    cpu.regs.set(instruction.rd as usize, operand1 << (operand2 & 0x20));
 }
 #[allow(dead_code)]
-pub fn srl(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
+pub fn srl(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2 = cpu.regs.get(instruction.rs2 as usize);
     // Logical shift right source1 by the value stored in the lowest 5 bits of source2.
-    registers::set(instruction.rd, operand1 >> (operand2 & 0x20));
+    cpu.regs.set(instruction.rd as usize, operand1 >> (operand2 & 0x20));
 }
 #[allow(dead_code)]
-pub fn sra(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
+pub fn sra(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2 = cpu.regs.get(instruction.rs2 as usize);
     // Arithmetic shift right source1 by the value stored in the lowest 5 bits of source2.
     //TODO: Rust seems to chose arithmetic or logic shift automatically. So I think both source needs to be signed.
-    registers::set(instruction.rd, operand1 >> (operand2 & 0x20));
+    cpu.regs.set(instruction.rd as usize, operand1 >> (operand2 & 0x20));
 }
 #[allow(dead_code)]
-pub fn slt(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
+pub fn slt(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2 = cpu.regs.get(instruction.rs2 as usize);
     
     let result = if operand1 < operand2 { 1 } else { 0};
-    registers::set(instruction.rd, result);
+    cpu.regs.set(instruction.rd as usize, result);
 }
 #[allow(dead_code)]
-pub fn sltu(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
+pub fn sltu(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2 = cpu.regs.get(instruction.rs2 as usize);
     
     let result = if operand1 < operand2 { 1 } else { 0};
-    registers::set(instruction.rd, result);
+    cpu.regs.set(instruction.rd as usize, result);
 }
 
 // TYPE - I OPCODE 0010011
 #[allow(dead_code)]
-pub fn addi(instruction: instruction_types::DecodedInst){
-    let rs1: u32 = registers::get(instruction.rs1);
-    registers::set(instruction.rd, rs1 + instruction.imm);
+pub fn addi(cpu: &mut Cpu, instruction: &DecodedInst){
+    let rs1: u32 = cpu.regs.get(instruction.rs1 as usize);
+    cpu.regs.set(instruction.rd as usize, rs1 + instruction.imm);
     println!("ADDI");
 }
 #[allow(dead_code)]
-pub fn xori(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1.try_into().unwrap());
-    registers::set(instruction.rd, operand1 ^ instruction.imm);
+pub fn xori(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1.try_into().unwrap());
+    cpu.regs.set(instruction.rd as usize, operand1 ^ instruction.imm);
     println!("XORI");
 }
 #[allow(dead_code)]
-pub fn andi(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    registers::set(instruction.rd, operand1 & instruction.imm);
+pub fn andi(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    cpu.regs.set(instruction.rd as usize, operand1 & instruction.imm);
     println!("ANDI");
 }
 #[allow(dead_code)]
-pub fn ori(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    registers::set(instruction.rd, operand1 | instruction.imm);
+pub fn ori(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    cpu.regs.set(instruction.rd as usize, operand1 | instruction.imm);
     println!("ORI");
 }
 #[allow(dead_code)]
-pub fn slli(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    registers::set(instruction.rd, operand1 << (instruction.imm & 0x20));
+pub fn slli(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    cpu.regs.set(instruction.rd as usize, operand1 << (instruction.imm & 0x20));
     println!("SLLI");
 }
 #[allow(dead_code)]
-pub fn srli(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    registers::set(instruction.rd, operand1 >> (instruction.imm & 0x20));
+pub fn srli(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    cpu.regs.set(instruction.rd as usize, operand1 >> (instruction.imm & 0x20));
     println!("SRLI");
 }
 #[allow(dead_code)]
-pub fn srai(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    registers::set(instruction.rd, operand1 >> (instruction.imm & 0x20));
+pub fn srai(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    cpu.regs.set(instruction.rd as usize, operand1 >> (instruction.imm & 0x20));
     println!("SRLI/SRAI");
 }
 #[allow(dead_code)]
-pub fn slti(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
+pub fn slti(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
     
     let result = if operand1 < instruction.imm { 1 } else { 0};
-    registers::set(instruction.rd, result);
+    cpu.regs.set(instruction.rd as usize, result);
     println!("SLTI");
 }
 #[allow(dead_code)]
-pub fn sltiu(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1) as u32;
+pub fn sltiu(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize) as u32;
     
     let result = if operand1 < instruction.imm as u32 { 1 } else { 0};
-    registers::set(instruction.rd, result);
+    cpu.regs.set(instruction.rd as usize, result);
     println!("SLTIU");
 }
 
@@ -255,79 +264,65 @@ pub fn sw(){}
 
 // TYPE B - OPCODE 1100011
 #[allow(dead_code)]
-pub fn beq(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
+pub fn beq(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2 = cpu.regs.get(instruction.rs2 as usize);
     if operand1 == operand2
     {
-        unsafe{
-            registers::PROGRAM_COUNTER += instruction.imm as u32;
-        }
+        cpu.regs.program_counter += instruction.imm as u32;
     }
 }
 #[allow(dead_code)]
-pub fn bne(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
+pub fn bne(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2 = cpu.regs.get(instruction.rs2 as usize);
     if operand1 != operand2
     {
-        unsafe{
-            registers::PROGRAM_COUNTER += instruction.imm as u32;
-        }
+        cpu.regs.program_counter += instruction.imm as u32;
     }
 }
 #[allow(dead_code)]
-pub fn blt(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
+pub fn blt(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2 = cpu.regs.get(instruction.rs2 as usize);
     if operand1 < operand2
     {
-        unsafe{
-            registers::PROGRAM_COUNTER += instruction.imm as u32;
-        }
+        cpu.regs.program_counter += instruction.imm as u32;
     }
 }
 #[allow(dead_code)]
-pub fn bge(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
+pub fn bge(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2 = cpu.regs.get(instruction.rs2 as usize);
     if operand1 >= operand2
     {
-        unsafe{
-            registers::PROGRAM_COUNTER += instruction.imm as u32;
-        }
+        cpu.regs.program_counter += instruction.imm as u32;
     }
 }
 #[allow(dead_code)]
-pub fn bltu(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
+pub fn bltu(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2 = cpu.regs.get(instruction.rs2 as usize);
     if operand1 < operand2
     {
-        unsafe{
-            registers::PROGRAM_COUNTER += instruction.imm as u32;
-        }
+        cpu.regs.program_counter += instruction.imm as u32;
     }
 }
 #[allow(dead_code)]
-pub fn bgeu(instruction: instruction_types::DecodedInst){
-    let operand1 = registers::get(instruction.rs1);
-    let operand2 = registers::get(instruction.rs2);
+pub fn bgeu(cpu: &mut Cpu, instruction: &DecodedInst){
+    let operand1 = cpu.regs.get(instruction.rs1 as usize);
+    let operand2 = cpu.regs.get(instruction.rs2 as usize);
     if operand1 == operand2
     {
-        unsafe{
-            registers::PROGRAM_COUNTER += instruction.imm as u32;
-        }
+        cpu.regs.program_counter += instruction.imm as u32;
     }
 }
 
 // TYPE J/I - OPCODE 1101111
 #[allow(dead_code)]
-pub fn jal(instruction: instruction_types::DecodedInst){
-    unsafe{
-        registers::PROGRAM_COUNTER += instruction.imm as u32;
-    }
-    registers::set(instruction.rs1, registers::get(instruction.rs1) + 4);
+pub fn jal(cpu: &mut Cpu, instruction: &DecodedInst){
+    cpu.regs.program_counter += instruction.imm as u32;
+    cpu.regs.set(instruction.rs1 as usize, cpu.regs.get(instruction.rs1 as usize) + 4);
 }
 #[allow(dead_code)]
 pub fn jalr(){
@@ -354,4 +349,125 @@ pub fn ebreak(){
 #[allow(dead_code)]
 pub fn fence(){}
 
-// In the future, functions for RISC ISA extensions will be defined below.
+pub struct DecodedInst{
+    pub raw_inst:   u32, // Raw instruction.
+    pub opcode:     u32, // Opcode field.
+    pub rs1:        u32, // Source register 1.
+    pub rs2:        u32, // Source register 2.
+    pub rd:         u32, // Destination register.
+    pub imm:        u32, // Sign extended immediate value for I type.
+    pub funct3:     u32, // Sub-function value I type.
+    pub funct7:     u32, // Sub-function value R type
+}
+
+impl DecodedInst {
+    pub fn decode(coded_inst: u32) -> Result<DecodedInst, String> {
+        let opcode: u32 = coded_inst & 0b0000000000000000000000001111111;
+        if opcode == 0b0110011 {         // R Type
+            Ok(decode_r_type(coded_inst))
+        }else if opcode == 0b0010011 || opcode == 0b0000011 || opcode == 0b1100111 || opcode == 0b1110011 {  // I Type
+            Ok(decode_i_type(coded_inst))
+        }else if opcode == 0b0100011 {  // S Type
+            Ok(decode_s_type(coded_inst))
+        }else if opcode == 0b1100011 {  // B Type
+            Ok(decode_b_type(coded_inst))
+        }else if opcode == 0b0110111 || opcode == 0b0010111{  // U Type
+            Ok(decode_u_type(coded_inst))
+        }else if opcode == 0b1101111 {  // J Type
+            Ok(decode_j_type(coded_inst))
+        }else{
+            Err("Instruction could not be decoded".to_string())
+        }
+    }
+    // Function to print the decoded instruction in a human readable way.
+    #[allow(dead_code)]
+    pub fn to_string(&self) -> String{
+        format!("raw_inst: {:#032b}\n\
+                    opcode:   {:#032b}\n\
+                    rd:       {:#032b}\n\
+                    rs1 as usize:      {:#032b}\n\
+                    rs2 as usize:      {:#032b}\n\
+                    imm:      {:#032b}\n\
+                    funct3:   {:#032b}\n\
+                    funct7:   {:#032b}", self.raw_inst, self.opcode, self.rd, self.rs1 as usize, self.rs2 as usize, self.imm, self.funct3, self.funct7)
+    }
+}
+
+
+fn decode_r_type(coded_inst: u32) -> DecodedInst{
+    DecodedInst{
+        raw_inst: coded_inst,
+        opcode: (coded_inst & 0b0000000000000000000000001111111),
+        rd:     (coded_inst & 0b0000000000000000000111110000000),
+        rs1:    (coded_inst & 0b0000000000011111000000000000000),
+        rs2:    (coded_inst & 0b0000000111100000000000000000000),
+        imm: 0,
+        funct3: (coded_inst & 0b0000000000000000111000000000000),
+        funct7: (coded_inst & 0b1111111000000000000000000000000)
+    }
+}
+
+fn decode_i_type(coded_inst: u32) -> DecodedInst{
+    DecodedInst{
+        raw_inst: coded_inst,
+        opcode: (coded_inst & 0b0000000000000000000000001111111),
+        rd:     (coded_inst & 0b0000000000000000000111110000000) >> 7,
+        rs1:    (coded_inst & 0b0000000000011111000000000000000) >> 15,
+        rs2:    0,
+        imm:    (coded_inst & 0b1111111111100000000000000000000) >> 20,
+        funct3: (coded_inst & 0b0000000000000000111000000000000) >> 12,
+        funct7: 0
+    }
+}
+
+fn decode_s_type(coded_inst: u32) -> DecodedInst{
+    DecodedInst{
+        raw_inst: coded_inst,
+        opcode: (coded_inst & 0b0000000000000000000000001111111),
+        rd:     0,
+        rs1:    (coded_inst & 0b0000000000011111000000000000000),
+        rs2:    (coded_inst & 0b0000000111100000000000000000000),
+        imm:    (coded_inst & 0b1111111000000000000000000000000) >> 17  | (coded_inst & 0b0000000000000000000111110000000) >> 7,
+        funct3: (coded_inst & 0b0000000000000000111000000000000),
+        funct7: 0
+    }
+}
+
+fn decode_b_type(coded_inst: u32) -> DecodedInst{
+    DecodedInst{
+        raw_inst: coded_inst,
+        opcode: (coded_inst & 0b0000000000000000000000001111111),
+        rd:     0,
+        rs1:    (coded_inst & 0b0000000000011111000000000000000),
+        rs2:    (coded_inst & 0b0000000111100000000000000000000),
+        imm:    (coded_inst & 0b1111111000000000000000000000000) | (coded_inst & 0b0000000000000000000111110000000),
+        funct3: (coded_inst & 0b0000000000000000111000000000000),
+        funct7: 0
+    }
+}
+
+fn decode_u_type(coded_inst: u32) -> DecodedInst{
+    DecodedInst{
+        raw_inst: coded_inst,
+        opcode: (coded_inst & 0b0000000000000000000000001111111),
+        rd:     (coded_inst & 0b0000000000000000000111110000000),
+        rs1:    0,
+        rs2:    0,
+        imm:    (coded_inst & 0b1111111111111111111000000000000),
+        funct3: 0,
+        funct7: 0
+    }
+}
+
+fn decode_j_type(coded_inst: u32) -> DecodedInst{
+    DecodedInst{
+        raw_inst: coded_inst,
+        opcode: (coded_inst & 0b0000000000000000000000001111111),
+        rd:     (coded_inst & 0b0000000000000000000111110000000),
+        rs1:    0,
+        rs2:    0,
+        imm:    (coded_inst & 0b1111111111111111111000000000000),
+        funct3: 0,
+        funct7: 0
+    }
+}
