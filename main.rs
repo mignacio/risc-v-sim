@@ -1,108 +1,14 @@
 mod instructions;
 
 use std::env;
-use instructions::instruction_types::*;
 // use instructions::InstFunc;
 
-pub struct Registers {
-    regs: [u32; 32],
-    program_counter: u32,
-}
-
-impl Registers {
-    fn print(&self) {
-        for reg in self.regs{
-            println!{"{:#08X}", reg};
-        }
-        println!("PC: {:#08X}", self.program_counter);
-    }
-
-    fn set(&mut self, index: usize, val: u32) {
-        // Register x0 is always 0, cannot be set to a different value.
-        if index != 0 {
-            self.regs[index] = val;
-        }
-    }
-
-    fn get(&self, index:usize) -> u32 {
-        self.regs[index]
-    }
-
-    fn clear(&mut self, index: usize) {
-        self.regs[index] = 0;
-    }
-
-    fn step(&mut self) {
-        self.program_counter+=1;
-    }
-}
-
-pub struct Cpu {
-    regs: Registers,
-    memory: Vec<u32>,
-}
-
-pub enum CpuFault {
-    MisalignedAddress,
-    AddressOutOfBounds,
-    DecodeError,
-    ExecuteError,
-}
-
-
-const MEM_SIZE: u32 = 0xFFFFFFFF; //Placeholder for now
-impl Cpu {
-    pub fn reset(&mut self) {
-
-    }
-
-    pub fn step(&mut self) -> Result<u32, CpuFault> {
-        let fetch_res: u32 = self.fetch(self.regs.program_counter)?;
-        let decoded: DecodedInst = self.decode(fetch_res)?;
-        self.execute(decoded);
-        self.regs.step();
-        Ok(fetch_res)
-    }
-
-    fn fetch(&mut self, program_counter: u32) -> Result<u32, CpuFault> {
-        // Is PC byte aligned?
-        if program_counter % 4 != 0 {
-            Err(CpuFault::MisalignedAddress)
-        }
-        // Is it inside memory boundaries?
-        else if program_counter > MEM_SIZE {
-            Err(CpuFault::AddressOutOfBounds)
-        }
-        else {
-            let res:Option<&u32> = self.memory.get(program_counter as usize);
-            match res {
-                Some(value) => Ok(*value),
-                None => Ok(0),
-            }
-        }
-    }
-
-    fn decode(&mut self, raw_inst: u32) -> Result<instructions::instruction_types::DecodedInst, CpuFault>{
-        instructions::instruction_types::DecodedInst::decode(raw_inst)
-            .map_err(|_| CpuFault::DecodeError)
-    }
-
-    fn execute(&mut self, decoded_inst: DecodedInst) {
-        match decoded_inst.funct3 {
-            0x0u32 => instructions::addi,
-            0x4u32 => instructions::xori,
-            0x6u32 => instructions::ori,
-            0x7u32 => instructions::andi,
-            0x1u32 => instructions::slli,
-            0x5u32 => instructions::srai,
-            0x2u32 => instructions::slti,
-            0x3u32 => instructions::sltiu,
-            8_u32..=u32::MAX => todo!()
-        };
-    }
-}
+mod cpu;
+mod instructions;
 
 fn main(){
+    let mut cpu = cpu::Cpu::new();
+    
     env::set_var("RUST_BACKTRACE", "1");
     let mut regs = Registers { regs: [0; 32], program_counter: 0 };
     //registers::print();

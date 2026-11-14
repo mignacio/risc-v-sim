@@ -1,8 +1,5 @@
 pub mod registers;
-
 pub mod instruction_types;
-
-pub type InstFunc = fn(instruction_types::DecodedInst);
 
 pub fn nop(_instruction: instruction_types::DecodedInst){
 
@@ -11,7 +8,7 @@ pub fn nop(_instruction: instruction_types::DecodedInst){
 //RV32I instruction set functions sorted by opcode.
 // TYPE R - OPCODE 0110011
 #[allow(dead_code)]
-pub fn add(instruction: instruction_types::DecodedInst){
+pub fn add(cpu: &mut Cpu){
     let operand1: u32 = registers::get(instruction.rs1);
     let operand2: u32 = registers::get(instruction.rs2);
     registers::set(instruction.rd, operand1 + operand2);
